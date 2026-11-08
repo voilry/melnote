@@ -6,6 +6,7 @@ import * as Notifications from 'expo-notifications';
 import { useEffect, useState, useMemo } from 'react';
 import { useColorScheme, View, Platform, Text, TextInput, AppState, StyleSheet } from 'react-native';
 import * as NavigationBar from 'expo-navigation-bar';
+import { ScreenMotion } from '../components/ui/ScreenMotion';
 
 // Prevent system font scaling from overriding the app's typography scale
 if ((Text as any).defaultProps == null) {
@@ -189,6 +190,21 @@ function RootLayoutContent() {
     <View style={{ flex: 1, backgroundColor: appColors.background }} key={refreshKey}>
       <ThemeProvider value={isDark ? MyDarkTheme : MyLightTheme}>
         <Stack
+          screenLayout={({ route, navigation, children }) => (
+            // Android only: the native fragment animation drops a frame of
+            // content, so the stack transition is done from JS instead. Motion
+            // and timings live in ScreenMotion. iOS keeps its platform push.
+            <ScreenMotion
+              navigation={navigation}
+              enabled={
+                Platform.OS === 'android' &&
+                route.name !== 'editor' &&
+                route.name !== '(tabs)'
+              }
+            >
+              {children}
+            </ScreenMotion>
+          )}
           screenOptions={{
             headerShown: false,
             headerStyle: {
@@ -199,7 +215,9 @@ function RootLayoutContent() {
             contentStyle: {
               backgroundColor: appColors.background,
             },
-            animation: 'fade_from_bottom',
+            // `none` disables the NATIVE fragment animation only; the visible
+            // transition is rendered by ScreenMotion above.
+            animation: Platform.OS === 'android' ? 'none' : 'fade_from_bottom',
           }}
         >
           <Stack.Screen name="(tabs)" options={{ headerShown: false, animation: 'none' }} />
@@ -210,7 +228,7 @@ function RootLayoutContent() {
           <Stack.Screen name="person/[id]/relations" options={{ headerShown: false }} />
           <Stack.Screen name="settings" options={{ title: 'Settings', headerShown: false }} />
           <Stack.Screen name="settings/appearance" options={{ title: 'Appearance', headerShown: false }} />
-          <Stack.Screen name="onboarding" options={{ headerShown: false, animation: 'fade' }} />
+          <Stack.Screen name="onboarding" options={{ headerShown: false, animation: Platform.OS === 'android' ? 'none' : 'fade' }} />
           <Stack.Screen
             name="editor"
             options={{
