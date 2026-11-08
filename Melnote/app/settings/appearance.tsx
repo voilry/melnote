@@ -103,6 +103,7 @@ export default function AppearanceSettingsScreen() {
                             icon={<Palette size={20} color={colors.tint} weight="duotone" />}
                             colors={colors}
                             style={[styles.paddingBox, { paddingBottom: 28 }]}
+                            badge={<ExpBadge />}
                         >
                             <Toggle
                                 value={settings.materialYouEnabled}
