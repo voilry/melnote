@@ -6,6 +6,7 @@ import * as Notifications from 'expo-notifications';
 import { useEffect, useState, useMemo } from 'react';
 import { useColorScheme, View, Platform, Text, TextInput, AppState, StyleSheet } from 'react-native';
 import { NavigationBar } from 'expo-navigation-bar';
+import { ScreenMotion } from '../components/ui/ScreenMotion';
 
 // Prevent system font scaling from overriding the app's typography scale
 if ((Text as any).defaultProps == null) {
@@ -191,6 +192,18 @@ function RootLayoutContent() {
     <View style={{ flex: 1, backgroundColor: appColors.background }} key={refreshKey}>
       <ThemeProvider value={isDark ? MyDarkTheme : MyLightTheme}>
         <Stack
+          screenLayout={({ route, navigation, children }) => (
+            <ScreenMotion
+              navigation={navigation}
+              isTabRoot={route.name === '(tabs)'}
+              enabled={
+                Platform.OS === 'android' &&
+                route.name !== 'editor'
+              }
+            >
+              {children}
+            </ScreenMotion>
+          )}
           screenOptions={{
             headerShown: false,
             headerStyle: {
@@ -201,9 +214,8 @@ function RootLayoutContent() {
             contentStyle: {
               backgroundColor: appColors.background,
             },
-            // Native-stack transition on both platforms. ScreenMotion and the
-            // JS-driven variant are intentionally not used on this branch.
-            animation: 'fade_from_bottom',
+            // Android uses ScreenMotion in JS; iOS keeps native push/fade
+            animation: Platform.OS === 'android' ? 'none' : 'fade_from_bottom',
           }}
         >
           <Stack.Screen name="(tabs)" options={{ headerShown: false, animation: 'none' }} />
@@ -214,7 +226,7 @@ function RootLayoutContent() {
           <Stack.Screen name="person/[id]/relations" options={{ headerShown: false }} />
           <Stack.Screen name="settings" options={{ title: 'Settings', headerShown: false }} />
           <Stack.Screen name="settings/appearance" options={{ title: 'Appearance', headerShown: false }} />
-          <Stack.Screen name="onboarding" options={{ headerShown: false, animation: 'fade' }} />
+          <Stack.Screen name="onboarding" options={{ headerShown: false, animation: Platform.OS === 'android' ? 'none' : 'fade' }} />
           <Stack.Screen
             name="editor"
             options={{
