@@ -18,7 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Typography } from '../../../constants/Typography';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect } from 'expo-router/react-navigation';
 import { BackHandler } from 'react-native';
 import { DeleteModal } from '../../../components/ui/DeleteModal';
 

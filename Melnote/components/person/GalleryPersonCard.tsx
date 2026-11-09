@@ -51,12 +51,12 @@ export const GalleryPersonCard = memo(({ person, colors, onPress, onLongPress }:
                 <>
                     <Image
                         source={{ uri: person.avatarUri }}
-                        style={StyleSheet.absoluteFillObject}
+                        style={StyleSheet.absoluteFill}
                         resizeMode="cover"
                     />
                     <LinearGradient
                         colors={['transparent', 'rgba(0,0,0,0.35)', 'rgba(0,0,0,0.82)']}
-                        style={StyleSheet.absoluteFillObject}
+                        style={StyleSheet.absoluteFill}
                         locations={[0.4, 0.68, 1]}
                     />
                     <View style={styles.textContainer}>
@@ -78,13 +78,13 @@ export const GalleryPersonCard = memo(({ person, colors, onPress, onLongPress }:
                 <View style={styles.fallbackContainer}>
                     <LinearGradient
                         colors={gradientColors as [string, string]}
-                        style={StyleSheet.absoluteFillObject}
+                        style={StyleSheet.absoluteFill}
                         start={{ x: 0, y: 0 }}
                         end={{ x: 1, y: 1 }}
                     />
                     <LinearGradient
                         colors={['transparent', 'rgba(0,0,0,0.2)', 'rgba(0,0,0,0.6)']}
-                        style={StyleSheet.absoluteFillObject}
+                        style={StyleSheet.absoluteFill}
                         locations={[0.3, 0.6, 1]}
                     />
 
@@ -145,7 +145,7 @@ const styles = StyleSheet.create({
         marginTop: -6,
     },
     fallbackContainer: {
-        ...StyleSheet.absoluteFillObject,
+        ...StyleSheet.absoluteFill,
         justifyContent: 'center',
         alignItems: 'center',
         gap: 0,

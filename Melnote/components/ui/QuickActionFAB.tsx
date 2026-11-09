@@ -79,11 +79,11 @@ export function QuickActionFAB({ onNewPerson, onNewNote, onNewReminder }: QuickA
             {/* Overlay when open to close on tap outside - Optional but good UX */}
             {isOpen && (
                 <TouchableOpacity
-                    style={StyleSheet.absoluteFillObject}
+                    style={StyleSheet.absoluteFill}
                     activeOpacity={1}
                     onPress={toggle}
                 >
-                    <BlurView intensity={20} tint={theme === 'dark' ? 'dark' : 'light'} style={StyleSheet.absoluteFillObject} />
+                    <BlurView intensity={20} tint={theme === 'dark' ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
                 </TouchableOpacity>
             )}
 
@@ -110,7 +110,7 @@ export function QuickActionFAB({ onNewPerson, onNewNote, onNewReminder }: QuickA
 
 const styles = StyleSheet.create({
     container: {
-        ...StyleSheet.absoluteFillObject,
+        ...StyleSheet.absoluteFill,
         zIndex: 1000,
         justifyContent: 'flex-end',
         alignItems: 'flex-end',

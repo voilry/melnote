@@ -295,7 +295,7 @@ const styles = StyleSheet.create({
         padding: 20,
     },
     overlayPress: {
-        ...StyleSheet.absoluteFillObject,
+        ...StyleSheet.absoluteFill,
         justifyContent: 'center',
         alignItems: 'center',
         padding: 20,

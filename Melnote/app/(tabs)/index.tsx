@@ -17,7 +17,7 @@ import { GroupRepository, Group } from '../../db/repositories/GroupRepository';
 import { JournalRepository } from '../../db/repositories/JournalRepository';
 import { SettingsRepository } from '../../db/repositories/SettingsRepository';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from 'expo-router/react-navigation';
 import { Button } from '../../components/ui/Button';
 import { Plus, MagnifyingGlass as Search, SearchNoResults, Camera, X, Check, CaretRight, CaretLeft, Faders as Filter, Gear as Settings, User as UserIcon, Folder, Calendar, PencilLine as PenLine, Bell, Book, PushPin, MapPin } from '@/components/ui/Icon';
 import { Skeleton } from '../../components/ui/Skeleton';
@@ -1637,7 +1637,7 @@ const styles = StyleSheet.create({
         paddingVertical: 16,
     },
     addMenuOverlay: {
-        ...StyleSheet.absoluteFillObject,
+        ...StyleSheet.absoluteFill,
         zIndex: 999,
     },
     addMenu: {

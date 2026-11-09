@@ -13,7 +13,7 @@ import { RelationshipRepository } from '../../db/repositories/RelationshipReposi
 import { DesignSystem } from '../../constants/DesignSystem';
 import { Trash, CaretLeft as ChevronLeft, DotsThree as MoreHorizontal, Info, ChatCenteredText as MessageSquare, BookOpen, Folder, PencilSimple as Edit, Star, Users, Briefcase, Heart, Lightning as Zap, Coffee, House as Home, Globe, Airplane as Plane, MusicNote as Music, Smiley as Smile, ContactsFour } from '@/components/ui/Icon';
 import { GroupRepository, Group } from '../../db/repositories/GroupRepository';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect } from 'expo-router/react-navigation';
 import * as Haptics from 'expo-haptics';
 import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';

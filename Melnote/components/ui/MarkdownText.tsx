@@ -39,10 +39,24 @@ export const MarkdownText: React.FC<MarkdownTextProps> = ({ content, style, padd
     }, [mentionNames]);
 
     const parseLine = (rawLine: string, index: number) => {
-        const line = rawLine.replace(/\r/g, '').trim();
+        const cleaned = rawLine.replace(/\r/g, '');
+        const line = cleaned.trim();
         // Blank markdown lines are paragraph separators — paragraph margins
         // already provide the rhythm; rendering them adds phantom gaps.
-        if (!line) return null;
+        if (!line) {
+            // But if the user intentionally had whitespace (spaces/tabs) on this line to skip a line:
+            if (cleaned.length > 0) {
+                const spacerHeight = (style && typeof style.lineHeight === 'number') ? Math.round(style.lineHeight * 0.75) : 18;
+                return <View key={index} style={{ height: spacerHeight }} />;
+            }
+            return null;
+        }
+
+        // Handle explicit empty line / space spacer (&nbsp;, <br>)
+        if (line === '&nbsp;' || line === '&#160;' || line === '\u00a0' || line === '<br>' || line === '<br/>' || line === '<br />') {
+            const spacerHeight = (style && typeof style.lineHeight === 'number') ? Math.round(style.lineHeight * 0.75) : 18;
+            return <View key={index} style={{ height: spacerHeight }} />;
+        }
         // Handle Horizontal Rule — explicit check first, then regex fallback
         if (line === '---' || line === '___' || /^[-*_]{3,}$/.test(line)) {
             return (
@@ -132,13 +146,13 @@ export const MarkdownText: React.FC<MarkdownTextProps> = ({ content, style, padd
         );
     };
 
-    const renderInlineMd = (text: string, baseStyle?: any) => {
-        const parts = [];
+    const renderInlineMd = (text: string, baseStyle?: any): React.ReactNode => {
+        const parts: React.ReactNode[] = [];
         let lastIdx = 0;
 
-        // Regex for Bold (**), Italic (*), Strikethrough (~~), Inline Code (`)
-        // Order matters for overlapping markers
-        const regex = /(\*\*.*?\*\*|\*.*?\*|~~.*?~~|`.*?`)/g;
+        // Regex for Bold+Italic (***), Bold (**), Italic (*), Strikethrough (~~), Inline Code (`)
+        // Order matters: *** must match before ** and *
+        const regex = /(\*\*\*.*?\*\*\*|\*\*.*?\*\*|\*.*?\*|~~.*?~~|`.*?`)/g;
         let match;
 
         while ((match = regex.exec(text)) !== null) {
@@ -147,27 +161,84 @@ export const MarkdownText: React.FC<MarkdownTextProps> = ({ content, style, padd
                 parts.push(text.substring(lastIdx, match.index));
             }
             const matchStr = match[0];
-            if (matchStr.startsWith('**') && matchStr.endsWith('**')) {
+            const mIdx = match.index;
+
+            if (matchStr.startsWith('***') && matchStr.endsWith('***') && matchStr.length >= 6) {
+                const inner = matchStr.substring(3, matchStr.length - 3);
                 parts.push(
-                    <Text key={match.index} allowFontScaling={false} maxFontSizeMultiplier={1} style={[baseStyle, { fontFamily: Typography.fontFamily.bold }]}>
-                        {matchStr.substring(2, matchStr.length - 2)}
+                    <Text
+                        key={`bi-${mIdx}`}
+                        allowFontScaling={false}
+                        maxFontSizeMultiplier={1}
+                        style={[
+                            baseStyle,
+                            {
+                                fontFamily: Typography.fontFamily.boldItalic,
+                                fontWeight: '700',
+                                fontStyle: 'italic',
+                            },
+                        ]}
+                    >
+                        {renderInlineMd(inner, baseStyle)}
                     </Text>
                 );
-            } else if (matchStr.startsWith('*') && matchStr.endsWith('*')) {
+            } else if (matchStr.startsWith('**') && matchStr.endsWith('**') && matchStr.length >= 4) {
+                const inner = matchStr.substring(2, matchStr.length - 2);
                 parts.push(
-                    <Text key={match.index} allowFontScaling={false} maxFontSizeMultiplier={1} style={[baseStyle, { fontFamily: Typography.fontFamily.italic }]}>
-                        {matchStr.substring(1, matchStr.length - 1)}
+                    <Text
+                        key={`b-${mIdx}`}
+                        allowFontScaling={false}
+                        maxFontSizeMultiplier={1}
+                        style={[
+                            baseStyle,
+                            {
+                                fontFamily: Typography.fontFamily.bold,
+                                fontWeight: '700',
+                            },
+                        ]}
+                    >
+                        {renderInlineMd(inner, baseStyle)}
                     </Text>
                 );
-            } else if (matchStr.startsWith('~~') && matchStr.endsWith('~~')) {
+            } else if (matchStr.startsWith('*') && matchStr.endsWith('*') && matchStr.length >= 2) {
+                const inner = matchStr.substring(1, matchStr.length - 1);
                 parts.push(
-                    <Text key={match.index} allowFontScaling={false} maxFontSizeMultiplier={1} style={[baseStyle, { textDecorationLine: 'line-through', opacity: 0.7 }]}>
-                        {matchStr.substring(2, matchStr.length - 2)}
+                    <Text
+                        key={`i-${mIdx}`}
+                        allowFontScaling={false}
+                        maxFontSizeMultiplier={1}
+                        style={[
+                            baseStyle,
+                            {
+                                fontFamily: Typography.fontFamily.italic,
+                                fontStyle: 'italic',
+                            },
+                        ]}
+                    >
+                        {renderInlineMd(inner, baseStyle)}
                     </Text>
                 );
-            } else if (matchStr.startsWith('`') && matchStr.endsWith('`')) {
+            } else if (matchStr.startsWith('~~') && matchStr.endsWith('~~') && matchStr.length >= 4) {
+                const inner = matchStr.substring(2, matchStr.length - 2);
                 parts.push(
-                    <View key={match.index} style={[styles.inlineCodeContainer, { backgroundColor: colors.surface }]}>
+                    <Text
+                        key={`s-${mIdx}`}
+                        allowFontScaling={false}
+                        maxFontSizeMultiplier={1}
+                        style={[
+                            baseStyle,
+                            {
+                                textDecorationLine: 'line-through',
+                                opacity: 0.7,
+                            },
+                        ]}
+                    >
+                        {renderInlineMd(inner, baseStyle)}
+                    </Text>
+                );
+            } else if (matchStr.startsWith('`') && matchStr.endsWith('`') && matchStr.length >= 2) {
+                parts.push(
+                    <View key={`c-${mIdx}`} style={[styles.inlineCodeContainer, { backgroundColor: colors.surface }]}>
                         <Text allowFontScaling={false} maxFontSizeMultiplier={1} style={[baseStyle, styles.inlineCode, { color: colors.tint }]}>
                             {matchStr.substring(1, matchStr.length - 1)}
                         </Text>
@@ -225,18 +296,22 @@ const styles = StyleSheet.create({
     },
     h1: {
         fontSize: 24,
+        lineHeight: 32,
         fontFamily: Typography.fontFamily.black,
         fontWeight: '900',
         marginTop: 16,
         marginBottom: 8,
         letterSpacing: -0.5,
+        paddingBottom: 2,
     },
     h2: {
         fontSize: 20,
+        lineHeight: 28,
         fontFamily: Typography.fontFamily.extrabold,
         fontWeight: '800',
         marginTop: 12,
         marginBottom: 6,
+        paddingBottom: 2,
     },
     paragraph: {
         fontSize: 16,

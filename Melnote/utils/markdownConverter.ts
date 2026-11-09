@@ -42,6 +42,7 @@ export function markdownToHtml(markdown: string): string {
         const convertInline = (text: string): string => {
             let res = text;
             res = res.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            res = res.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
             res = res.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
             res = res.replace(/\*(.+?)\*/g, '<em>$1</em>');
             res = res.replace(/~~(.+?)~~/g, '<s>$1</s>');
@@ -60,6 +61,13 @@ export function markdownToHtml(markdown: string): string {
                 // paragraph after every save→reload cycle (editor showed a
                 // double gap, reader an extra blank line). Paragraph spacing
                 // comes from <p> margins alone.
+                continue;
+            }
+
+            // Explicit empty line / paragraph skip
+            if (trimmed === '&nbsp;' || trimmed === '&#160;') {
+                closeLists();
+                htmlLines.push('<p></p>');
                 continue;
             }
 
@@ -208,8 +216,8 @@ export function htmlToMarkdown(html: string): string {
     // Paragraphs & Line Breaks
     // Divider paragraphs (<p>---</p>, <p>___</p>, <p>***</p>) → canonical thematic break
     md = md.replace(/<p[^>]*>\s*(---|___|\*\*\*)\s*<\/p>/gi, '\n\n---\n\n');
-    // Empty paragraphs (<p></p> or <p><br></p>) → single blank line
-    md = md.replace(/<p[^>]*>\s*(<br\s*\/?>)?\s*<\/p>/gi, '\n');
+    // Empty paragraphs (<p></p>, <p><br></p>, <p>&nbsp;</p>, <p> </p>) → explicit empty line spacer (&nbsp;)
+    md = md.replace(/<p[^>]*>(\s*(&nbsp;|&#160;)?\s*(<br\s*\/?>)?\s*(&nbsp;|&#160;)?\s*)<\/p>/gi, '\n&nbsp;\n');
     // Regular paragraphs → content + double newline
     md = md.replace(/<p[^>]*>([\s\S]*?)<\/p>/gi, '$1\n\n');
     md = md.replace(/<br\s*\/?>/gi, '\n');
@@ -231,8 +239,7 @@ export function htmlToMarkdown(html: string): string {
         .replace(/&lt;/g, '<')
         .replace(/&gt;/g, '>')
         .replace(/&quot;/g, '"')
-        .replace(/&#39;/g, "'")
-        .replace(/&nbsp;/g, ' ');
+        .replace(/&#39;/g, "'");
 
     // Normalize multiple consecutive blank lines
     md = md.replace(/\n{3,}/g, '\n\n');

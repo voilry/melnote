@@ -565,12 +565,12 @@ const styles = StyleSheet.create({
         overflow: 'hidden',
     },
     scene: {
-        ...StyleSheet.absoluteFillObject,
+        ...StyleSheet.absoluteFill,
         alignItems: 'center',
         justifyContent: 'center',
     },
     fill: {
-        ...StyleSheet.absoluteFillObject,
+        ...StyleSheet.absoluteFill,
     },
 
     noteScreen: {
@@ -653,7 +653,7 @@ const styles = StyleSheet.create({
     },
 
     gestureScene: {
-        ...StyleSheet.absoluteFillObject,
+        ...StyleSheet.absoluteFill,
         justifyContent: 'center',
         paddingHorizontal: 16,
         gap: 22,

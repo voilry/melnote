@@ -53,13 +53,13 @@ export const DashboardGroupCard = memo(({ title, description, iconName, color, i
                         colors={[`${color}33`, `${color}00`]}
                         start={{ x: 0, y: 0 }}
                         end={{ x: 1, y: 1 }}
-                        style={[StyleSheet.absoluteFillObject, { borderRadius: 24 }]}
+                        style={[StyleSheet.absoluteFill, { borderRadius: 24 }]}
                     />
                     <LinearGradient
                         colors={['rgba(255,255,255,0.08)', 'rgba(255,255,255,0)']}
                         start={{ x: 0, y: 0 }}
                         end={{ x: 0, y: 0.45 }}
-                        style={[StyleSheet.absoluteFillObject, { borderRadius: 24 }]}
+                        style={[StyleSheet.absoluteFill, { borderRadius: 24 }]}
                     />
                 </>
             )}

@@ -6,11 +6,6 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#c9803a"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.voilry.melnote"
@@ -22,9 +17,6 @@
       },
       "package": "com.voilry.melnote"
     },
-    "androidNavigationBar": {
-      "visible": "sticky-immersive"
-    },
     "web": {
       "favicon": "./assets/favicon.png",
       "bundler": "metro"
@@ -33,6 +25,14 @@
       "expo-router",
       "expo-sqlite",
       "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#c9803a"
+        }
+      ],
       "@react-native-community/datetimepicker",
       "expo-secure-store",
       [

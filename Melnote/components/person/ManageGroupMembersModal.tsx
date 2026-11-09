@@ -1473,7 +1473,7 @@ const styles = StyleSheet.create({
 
     /* Add page ------------------------------------------------------ */
     addPage: {
-        ...StyleSheet.absoluteFillObject,
+        ...StyleSheet.absoluteFill,
         zIndex: 10,
     },
     addWash: {

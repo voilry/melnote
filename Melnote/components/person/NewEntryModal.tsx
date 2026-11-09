@@ -10,7 +10,7 @@ import { Input } from '../ui/Input';
 import { X, Check } from '@/components/ui/Icon';
 import { useAppTheme } from '../../hooks/useAppTheme';
 import Reanimated, { FadeInDown } from 'react-native-reanimated';
-import * as FileSystem from 'expo-file-system';
+import { File, Paths } from 'expo-file-system';
 import { DeleteModal } from '../ui/DeleteModal';
 import { EntryRepository, EntryType } from '../../db/repositories/EntryRepository';
 import { useSettings } from '../../store/SettingsContext';
@@ -18,9 +18,8 @@ import { ScreenHeader } from '../ui/ScreenHeader';
 import { Typography } from '../../constants/Typography';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ScalePressable } from '../ui/ScalePressable';
-import { opacity } from 'react-native-reanimated/lib/typescript/Colors';
 
-const DRAFT_FILE = ((FileSystem as any).cacheDirectory || '') + 'entry_draft.json';
+const DRAFT_FILE = new File(Paths.cache, 'entry_draft.json');
 
 interface NewEntryModalProps {
     visible: boolean;
@@ -87,9 +86,8 @@ export function NewEntryModal({ visible, onClose, onSave, personId }: NewEntryMo
 
     const checkDraft = async () => {
         try {
-            const info = await FileSystem.getInfoAsync(DRAFT_FILE);
-            if (info.exists) {
-                const contentStr = await FileSystem.readAsStringAsync(DRAFT_FILE);
+            if (DRAFT_FILE.exists) {
+                const contentStr = await DRAFT_FILE.text();
                 const draft = JSON.parse(contentStr);
                 if (draft.content) {
                     setContent(draft.content);
@@ -104,7 +102,10 @@ export function NewEntryModal({ visible, onClose, onSave, personId }: NewEntryMo
         if (saveTimeout.current) clearTimeout(saveTimeout.current);
         saveTimeout.current = setTimeout(async () => {
             try {
-                await FileSystem.writeAsStringAsync(DRAFT_FILE, JSON.stringify({
+                if (!DRAFT_FILE.exists) {
+                    DRAFT_FILE.create();
+                }
+                DRAFT_FILE.write(JSON.stringify({
                     category: cat,
                     customCategory: customCat,
                     content: text
@@ -123,7 +124,9 @@ export function NewEntryModal({ visible, onClose, onSave, personId }: NewEntryMo
 
     const clearDraft = async () => {
         try {
-            await FileSystem.deleteAsync(DRAFT_FILE, { idempotent: true });
+            if (DRAFT_FILE.exists) {
+                DRAFT_FILE.delete();
+            }
         } catch (e) { }
     };
 

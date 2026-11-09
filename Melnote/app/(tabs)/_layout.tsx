@@ -297,7 +297,7 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
                 >
                     {/* The Tint Overlay - This is the "design" part */}
                     <View style={{
-                        ...StyleSheet.absoluteFillObject,
+                        ...StyleSheet.absoluteFill,
                         backgroundColor: showAddMenu ? colors.tint : (colors.tint + '25'),
                         justifyContent: 'center',
                         alignItems: 'center',

@@ -151,7 +151,7 @@ const styles = StyleSheet.create({
         // Even with font icons, it causes rendering glitches in complex layouts like the Profile Tabs.
     },
     overlay: {
-        ...StyleSheet.absoluteFillObject,
+        ...StyleSheet.absoluteFill,
         zIndex: 0,
     },
 });

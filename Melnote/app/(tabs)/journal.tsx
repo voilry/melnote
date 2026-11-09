@@ -16,7 +16,7 @@ import { Avatar } from '../../components/ui/Avatar';
 import { Card } from '../../components/ui/Card';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect } from 'expo-router/react-navigation';
 import * as Haptics from 'expo-haptics';
 import { ScalePressable } from '../../components/ui/ScalePressable';
 import { DeleteModal } from '../../components/ui/DeleteModal';

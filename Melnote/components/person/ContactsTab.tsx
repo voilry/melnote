@@ -718,7 +718,7 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     actionBackdrop: {
-        ...StyleSheet.absoluteFillObject,
+        ...StyleSheet.absoluteFill,
         alignItems: 'center',
         justifyContent: 'center',
         padding: 20,
