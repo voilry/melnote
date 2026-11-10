@@ -482,7 +482,46 @@ export const RichEditor: React.FC<RichEditorProps> = ({
             // ---- @mention detection (journal mode) --------------------------
             // Streams the partial query after a caret-adjacent '@' to RN, which
             // shows the connection suggestion bar. null closes it.
+            //
+            // Two shapes are recognised:
+            //   1. a single word right after '@'            ("@and")
+            //   2. the WHOLE '@…' token when it is a prefix of a known
+            //      connection name ("@Andrea Justi"). This is what keeps
+            //      multi-word names alive: backspacing inside a picked mention
+            //      re-opens the suggestion list, and picking again replaces the
+            //      whole token instead of leaving 'Justin' behind.
             var MENTION_RE = new RegExp('(?:^|[\\\\s\\\\n\\\\r\\\\u200B\\\\uFEFF])@([^\\\\s@\\\\u200B\\\\uFEFF]{0,24})$');
+            var MENTION_TOKEN_RE = new RegExp('@([^@\\\\n\\\\r\\\\u200B\\\\uFEFF]{0,48})$');
+
+            function normalizeMentionName(value) {
+                return String(value || '').replace(/\\s+/g, ' ').trim().toLowerCase();
+            }
+
+            function isKnownNamePrefix(value) {
+                var names = window.melnoteMentionNames || [];
+                var needle = normalizeMentionName(value);
+                if (!needle) return false;
+                for (var i = 0; i < names.length; i++) {
+                    if (normalizeMentionName(names[i]).indexOf(needle) === 0) return true;
+                }
+                return false;
+            }
+
+            // { query, length } for the mention being typed at the caret; the
+            // length counts characters back from the caret (the '@' included).
+            function mentionAtCursor(text) {
+                var m = String(text || '').match(MENTION_RE);
+                if (m) return { query: m[1], length: m[1].length + 1 };
+                var t = String(text || '').match(MENTION_TOKEN_RE);
+                if (t) {
+                    var token = t[1];
+                    // A trailing space means the mention was completed — closed.
+                    if (token && !/\\s$/.test(token) && isKnownNamePrefix(token)) {
+                        return { query: token, length: token.length + 1 };
+                    }
+                }
+                return null;
+            }
 
             function detectMention() {
                 if (!JOURNAL) return;
@@ -494,8 +533,8 @@ export const RichEditor: React.FC<RichEditorProps> = ({
                         var $from = state.selection ? state.selection.$from : null;
                         if ($from && $from.parent) {
                             var textBefore = $from.parent.textBetween(0, $from.parentOffset);
-                            var m = textBefore.match(MENTION_RE);
-                            if (m) q = m[1];
+                            var hit = mentionAtCursor(textBefore);
+                            if (hit) q = hit.query;
                         }
                     }
                     if (q === null) {
@@ -510,8 +549,8 @@ export const RichEditor: React.FC<RichEditorProps> = ({
                                 var host = node.parentElement && node.parentElement.closest('.melnote-journal-title');
                                 if (!host) {
                                     var before = String(node.textContent || '').slice(0, range.startOffset);
-                                    var m2 = before.match(MENTION_RE);
-                                    if (m2) q = m2[1];
+                                    var hit2 = mentionAtCursor(before);
+                                    if (hit2) q = hit2.query;
                                 }
                             }
                         }
@@ -530,10 +569,10 @@ export const RichEditor: React.FC<RichEditorProps> = ({
                     if (!$from || !$from.parent) return false;
 
                     var textBefore = $from.parent.textBetween(0, $from.parentOffset);
-                    var m = textBefore.match(MENTION_RE);
-                    if (!m) return false;
+                    var hit = mentionAtCursor(textBefore);
+                    if (!hit) return false;
 
-                    var matchLength = m[1].length + 1;
+                    var matchLength = hit.length;
                     var from = state.selection.from - matchLength;
                     var to = state.selection.from;
 
@@ -559,6 +598,11 @@ export const RichEditor: React.FC<RichEditorProps> = ({
                     tr.setStoredMarks([]);
                     editor.view.dispatch(tr);
                     editor.view.focus();
+                    // Repaint immediately; the mutation observer also catches
+                    // it, but this makes the new mention colour appear at once.
+                    requestAnimationFrame(function () {
+                        try { syncAll(); } catch (_e) {}
+                    });
                     return true;
                 } catch (_e) {
                     return false;
@@ -847,36 +891,83 @@ export const RichEditor: React.FC<RichEditorProps> = ({
             // Paints @Name tokens in the tint color using the CSS Custom
             // Highlight API — pure paint, ZERO DOM mutation, so ProseMirror's
             // reconciler never notices. Names stream in from RN as
-            // window.melnoteMentionNames.
+            // window.melnoteMentionEscaped.
+            //
+            // Matching is done per BLOCK (paragraph / heading / list item):
+            // text nodes are concatenated first, so a mention split across
+            // inline nodes (bold boundary, adjacent text nodes) still yields
+            // one contiguous highlight, and multi-word names match no matter
+            // how the line is fragmented.
             function syncMentionHighlights() {
                 try {
                     if (!JOURNAL || !window.CSS || !CSS.highlights || typeof Highlight === 'undefined') return;
                     var pm = document.querySelector('.ProseMirror');
                     if (!pm) return;
-                    var names = window.melnoteMentionEscaped || [];
-                    var all = pm.textContent || '';
-                    if (!names.length || all.indexOf('@') === -1) {
+                    var patterns = window.melnoteMentionEscaped || [];
+                    if (!patterns.length || (pm.textContent || '').indexOf('@') === -1) {
                         CSS.highlights.delete('melnote-mention');
                         return;
                     }
-                    var esc = (window.melnoteMentionEscaped || []).slice().sort(function (a, b) { return b.length - a.length; });
-                    var re = new RegExp('(@(?:' + esc.join('|') + '))(?=$|[^\\\\w\\u2019-])', 'g');
+                    var re = new RegExp('(@(?:' + patterns.join('|') + '))(?=$|[^\\\\w\\\\u2019-])', 'gi');
                     var ranges = [];
-                    var walker = document.createTreeWalker(pm, NodeFilter.SHOW_TEXT, null);
-                    var node;
-                    while ((node = walker.nextNode())) {
-                        var t = node.textContent || '';
-                        re.lastIndex = 0;
-                        var m;
-                        while ((m = re.exec(t)) !== null) {
-                            if (m[0].length === 0) { re.lastIndex++; continue; }
-                            var r = document.createRange();
-                            r.setStart(node, m.index);
-                            r.setEnd(node, m.index + m[0].length);
-                            ranges.push(r);
+
+                    function pushRange(nodes, start, end) {
+                        var offset = 0;
+                        for (var i = 0; i < nodes.length; i++) {
+                            var node = nodes[i];
+                            var len = (node.nodeValue || '').length;
+                            var nodeStart = offset;
+                            var nodeEnd = offset + len;
+                            offset = nodeEnd;
+                            if (!len || nodeEnd <= start) continue;
+                            if (nodeStart >= end) break;
+                            var s = Math.max(start, nodeStart) - nodeStart;
+                            var e = Math.min(end, nodeEnd) - nodeStart;
+                            if (e > s) {
+                                var range = document.createRange();
+                                range.setStart(node, s);
+                                range.setEnd(node, e);
+                                ranges.push(range);
+                            }
                         }
                     }
-                    CSS.highlights.set('melnote-mention', new (Highlight.bind.apply(Highlight, [null].concat(ranges)))());
+
+                    function flush(nodes) {
+                        if (!nodes.length) return;
+                        var text = '';
+                        for (var i = 0; i < nodes.length; i++) text += nodes[i].nodeValue || '';
+                        if (text.indexOf('@') === -1) return;
+                        re.lastIndex = 0;
+                        var match;
+                        while ((match = re.exec(text)) !== null) {
+                            if (!match[0].length) { re.lastIndex++; continue; }
+                            pushRange(nodes, match.index, match.index + match[0].length);
+                        }
+                    }
+
+                    var walker = document.createTreeWalker(pm, NodeFilter.SHOW_TEXT, null);
+                    var group = [];
+                    var block = null;
+                    var node;
+                    while ((node = walker.nextNode())) {
+                        var host = node.parentElement;
+                        var nextBlock = (host && host.closest('p,h1,h2,h3,h4,h5,h6,li,blockquote')) || host || pm;
+                        if (block && nextBlock !== block) {
+                            flush(group);
+                            group = [];
+                        }
+                        block = nextBlock;
+                        group.push(node);
+                    }
+                    flush(group);
+
+                    if (!ranges.length) {
+                        CSS.highlights.delete('melnote-mention');
+                        return;
+                    }
+                    var highlight = new Highlight();
+                    for (var ri = 0; ri < ranges.length; ri++) highlight.add(ranges[ri]);
+                    CSS.highlights.set('melnote-mention', highlight);
                 } catch (_e) {}
             }
 
@@ -974,12 +1065,17 @@ export const RichEditor: React.FC<RichEditorProps> = ({
 
     // Stream mention patterns for the editor-side @Name highlighter. Names are
     // regex-escaped RN-side (the injected script is a template literal, so the
-    // escaping itself must not live there).
+    // escaping itself must not live there). The RAW names are streamed too so
+    // the caret-side matcher can recognise multi-word prefixes.
     const mentionNamesKey = (mentionNames || []).join('\u0001');
     useEffect(() => {
         if (!editor || !journalMeta) return;
-        const escaped = escapedMentionPatterns(mentionNamesKey ? mentionNamesKey.split('\u0001') : []);
-        editor.webviewRef.current?.injectJavaScript(`window.melnoteMentionEscaped = ${JSON.stringify(escaped)};true;`);
+        const list = mentionNamesKey ? mentionNamesKey.split('\u0001') : [];
+        const escaped = escapedMentionPatterns(list);
+        editor.webviewRef.current?.injectJavaScript(
+            `window.melnoteMentionEscaped = ${JSON.stringify(escaped)};` +
+            `window.melnoteMentionNames = ${JSON.stringify(list)};true;`
+        );
     }, [editor, journalMeta, mentionNamesKey]);
 
     // Prewarm support (journal): on every sessionToken bump, push the latest

@@ -573,12 +573,31 @@ export default function JournalEditorScreen() {
                                         node = node.childNodes[range.startOffset - 1] || node.lastChild || node;
                                     }
                                     if (!node || node.nodeType !== 3) return;
-                                    var M_RE = new RegExp('(?:^|[\\\\s\\\\n\\\\r\\\\u200B\\\\uFEFF])@([^\\\\s@\\\\u200B\\\\uFEFF]{0,24})$');
+                                    var M_WORD = new RegExp('(?:^|[\\\\s\\\\n\\\\r\\\\u200B\\\\uFEFF])@([^\\\\s@\\\\u200B\\\\uFEFF]{0,24})$');
+                                    var M_TOKEN = new RegExp('@([^@\\\\n\\\\r\\\\u200B\\\\uFEFF]{0,48})$');
                                     var before = String(node.textContent || '').slice(0, range.startOffset);
-                                    var m = before.match(M_RE);
-                                    if (!m) return;
+                                    var length = 0;
+                                    var w = before.match(M_WORD);
+                                    if (w) {
+                                        length = w[1].length + 1;
+                                    } else {
+                                        // Multi-word mention ("@Andrea Justi"):
+                                        // only treat the token as replaceable
+                                        // when it is a prefix of a known name.
+                                        var t = before.match(M_TOKEN);
+                                        if (!t || !t[1] || /\\s$/.test(t[1])) return;
+                                        var needle = t[1].replace(/\\s+/g, ' ').trim().toLowerCase();
+                                        var names = window.melnoteMentionNames || [];
+                                        var known = false;
+                                        for (var ni = 0; ni < names.length; ni++) {
+                                            var nm = String(names[ni] || '').replace(/\\s+/g, ' ').trim().toLowerCase();
+                                            if (nm.indexOf(needle) === 0) { known = true; break; }
+                                        }
+                                        if (!known) return;
+                                        length = t[1].length + 1;
+                                    }
                                     var r = document.createRange();
-                                    r.setStart(node, range.startOffset - m[1].length - 1);
+                                    r.setStart(node, range.startOffset - length);
                                     r.setEnd(node, range.startOffset);
                                     sel.removeAllRanges();
                                     sel.addRange(r);

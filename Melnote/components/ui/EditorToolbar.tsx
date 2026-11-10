@@ -48,6 +48,58 @@ export function EditorToolbar({
         action();
     };
 
+    /**
+     * H1/H2 behave like a *future-text* switch instead of rewriting the line
+     * the caret is sitting in.
+     *
+     * Headings are block nodes, so "make the whole current paragraph a
+     * heading" was the only thing `toggleHeading` could do — pressing it
+     * mid-sentence grew the existing line and pushed the layout around.
+     *
+     * New behaviour:
+     *  - caret in a paragraph that already has text → keep that line exactly
+     *    as it is, open a fresh empty heading line after it and put the caret
+     *    there; everything typed next is the heading.
+     *  - empty line, selection, or heading line → the original toggle (so
+     *    turning a heading back off still works).
+     *
+     * Runs in the WebView because the bridge only exposes the raw
+     * `toggleHeading(level)` command.
+     */
+    const handleHeading = (level: 1 | 2) => {
+        triggerHaptic();
+        if (!editor) return;
+        const webview = editor.webviewRef.current;
+        if (!webview) {
+            editor.toggleHeading(level);
+            return;
+        }
+        webview.injectJavaScript(`
+            (function () {
+                try {
+                    var pm = document.querySelector('.ProseMirror');
+                    var ed = pm && pm.editor;
+                    if (!ed || !ed.state) return;
+                    var state = ed.state;
+                    var sel = state.selection;
+                    var $from = sel && sel.$from;
+                    var parent = $from && $from.parent;
+                    if (!parent) return;
+                    var isTopLevelParagraph = $from.depth === 1 && parent.type && parent.type.name === 'paragraph';
+                    var hasText = String(parent.textContent || '').trim().length > 0;
+                    if (sel.empty && isTopLevelParagraph && hasText) {
+                        // Leave the current line untouched; start a new empty
+                        // block after it and convert THAT block to a heading.
+                        ed.chain().focus().setTextSelection($from.end()).splitBlock().toggleHeading({ level: ${level} }).run();
+                    } else {
+                        ed.chain().focus().toggleHeading({ level: ${level} }).run();
+                    }
+                } catch (_e) {}
+            })();
+            true;
+        `);
+    };
+
     return (
         <View style={[styles.toolbar, { borderTopColor: colors.border + '30', backgroundColor: colors.background }]}>
             <ScrollView
@@ -110,7 +162,7 @@ export function EditorToolbar({
 
                         {/* H1 */}
                         <TouchableOpacity
-                            onPress={() => handleAction(() => editor?.toggleHeading(1))}
+                            onPress={() => handleHeading(1)}
                             style={[styles.toolbarButton, headingLevel === 1 && { backgroundColor: colors.tint + '20', borderRadius: 8 }]}
                         >
                             <ThemedText style={[styles.toolbarText, { color: headingLevel === 1 ? colors.tint : colors.text, fontFamily: Typography.fontFamily.bold }]}>H1</ThemedText>
@@ -118,7 +170,7 @@ export function EditorToolbar({
 
                         {/* H2 */}
                         <TouchableOpacity
-                            onPress={() => handleAction(() => editor?.toggleHeading(2))}
+                            onPress={() => handleHeading(2)}
                             style={[styles.toolbarButton, headingLevel === 2 && { backgroundColor: colors.tint + '20', borderRadius: 8 }]}
                         >
                             <ThemedText style={[styles.toolbarText, { color: headingLevel === 2 ? colors.tint : colors.text, fontFamily: Typography.fontFamily.bold }]}>H2</ThemedText>

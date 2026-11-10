@@ -171,6 +171,25 @@ export function htmlToMarkdown(html: string): string {
     md = md.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
     md = md.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '');
 
+    // Empty headings are ABANDONED heading lines (e.g. H1 pressed and then
+    // nothing typed). Left alone they serialize to a bare '#' line, which the
+    // reader then renders as literal text. Drop the block entirely.
+    //
+    // "Empty" means no visible text: markup, <br>, whitespace, &nbsp; and
+    // zero-width entities don't count. Any textual content (characters,
+    // entities like &amp;) keeps the heading. A user's own '#' characters live
+    // in a <p>, never in an <hN>, so they are never at risk.
+    //
+    // An image-only heading counts as empty too: this converter does not
+    // serialize <img> inside headings, so keeping it would emit a bare '#'.
+    md = md.replace(/<h([1-6])([^>]*)>([\s\S]*?)<\/h\1>/gi, (block, _level, _attrs, inner) => {
+        const visible = inner
+            .replace(/<[^>]*>/g, '')
+            .replace(/&nbsp;|&#160;|&ZeroWidthSpace;|&#8203;|&#x200B;/gi, ' ')
+            .replace(/[\s\u200B\uFEFF]/g, '');
+        return visible ? block : '';
+    });
+
     // Headings
     md = md.replace(/<h1[^>]*>([\s\S]*?)<\/h1>/gi, '# $1\n\n');
     md = md.replace(/<h2[^>]*>([\s\S]*?)<\/h2>/gi, '## $1\n\n');
