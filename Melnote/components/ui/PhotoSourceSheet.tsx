@@ -3,13 +3,13 @@ import {
     ActivityIndicator,
     Alert,
     Modal,
-    Platform,
     Pressable,
     StyleSheet,
     View,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import Animated, { Easing, FadeIn, SlideInDown } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemedText } from './ThemedText';
 import { useAppTheme } from '../../hooks/useAppTheme';
 import { Typography } from '../../constants/Typography';
@@ -36,6 +36,7 @@ interface PhotoSourceSheetProps {
  */
 export function PhotoSourceSheet({ visible, onClose, onPicked, title }: PhotoSourceSheetProps) {
     const { colors } = useAppTheme();
+    const insets = useSafeAreaInsets();
     const [importing, setImporting] = React.useState(false);
 
     const pick = async (source: 'library' | 'camera') => {
@@ -87,63 +88,76 @@ export function PhotoSourceSheet({ visible, onClose, onPicked, title }: PhotoSou
             statusBarTranslucent
             onRequestClose={onClose}
         >
-            <Pressable style={styles.backdrop} onPress={onClose}>
+            <View style={styles.overlay}>
                 <Animated.View
                     entering={FadeIn.duration(220).easing(EASE_ENTER)}
                     style={[StyleSheet.absoluteFill, styles.dim]}
                     pointerEvents="none"
                 />
-                <Animated.View
-                    entering={SHEET_ENTER}
-                    style={[styles.sheet, { backgroundColor: colors.background }]}
-                    onStartShouldSetResponder={() => true}
-                >
-                    <View style={[styles.handle, { backgroundColor: colors.border }]} />
-
-                    {title ? (
-                        <ThemedText style={[styles.title, { color: colors.secondary }]}>
-                            {title}
-                        </ThemedText>
-                    ) : null}
-
-                    <ScalePressable
-                        style={styles.row}
-                        innerStyle={{ borderRadius: 12 }}
-                        onPress={() => pick('library')}
-                        disabled={importing}
-                        accessibilityRole="button"
-                        accessibilityLabel="Choose from photo library"
+                <Pressable style={styles.backdrop} onPress={onClose}>
+                    <Animated.View
+                        entering={SHEET_ENTER}
+                        style={[
+                            styles.sheet,
+                            {
+                                backgroundColor: colors.background,
+                                // Same bleed as the app's other bottom sheets.
+                                paddingBottom: 100 + insets.bottom + 24,
+                                marginBottom: -100,
+                            },
+                        ]}
+                        onStartShouldSetResponder={() => true}
                     >
-                        {importing
-                            ? <ActivityIndicator size="small" color={colors.tint} />
-                            : <PhotoAlbum size={20} color={colors.text} />}
-                        <ThemedText style={[styles.label, { color: colors.text }]}>
-                            Photo library
-                        </ThemedText>
-                    </ScalePressable>
+                        <View style={[styles.handle, { backgroundColor: colors.border }]} />
 
-                    <View style={[styles.divider, { backgroundColor: colors.border + '30' }]} />
+                        {title ? (
+                            <ThemedText style={[styles.title, { color: colors.secondary }]}>
+                                {title}
+                            </ThemedText>
+                        ) : null}
 
-                    <ScalePressable
-                        style={styles.row}
-                        innerStyle={{ borderRadius: 12 }}
-                        onPress={() => pick('camera')}
-                        disabled={importing}
-                        accessibilityRole="button"
-                        accessibilityLabel="Take a photo"
-                    >
-                        <Camera size={20} color={colors.text} />
-                        <ThemedText style={[styles.label, { color: colors.text }]}>
-                            Take photo
-                        </ThemedText>
-                    </ScalePressable>
-                </Animated.View>
-            </Pressable>
+                        <ScalePressable
+                            style={styles.row}
+                            innerStyle={{ borderRadius: 12 }}
+                            onPress={() => pick('library')}
+                            disabled={importing}
+                            accessibilityRole="button"
+                            accessibilityLabel="Choose from photo library"
+                        >
+                            {importing
+                                ? <ActivityIndicator size="small" color={colors.tint} />
+                                : <PhotoAlbum size={20} color={colors.text} />}
+                            <ThemedText style={[styles.label, { color: colors.text }]}>
+                                Photo library
+                            </ThemedText>
+                        </ScalePressable>
+
+                        <View style={[styles.divider, { backgroundColor: colors.border + '30' }]} />
+
+                        <ScalePressable
+                            style={styles.row}
+                            innerStyle={{ borderRadius: 12 }}
+                            onPress={() => pick('camera')}
+                            disabled={importing}
+                            accessibilityRole="button"
+                            accessibilityLabel="Take a photo"
+                        >
+                            <Camera size={20} color={colors.text} />
+                            <ThemedText style={[styles.label, { color: colors.text }]}>
+                                Take photo
+                            </ThemedText>
+                        </ScalePressable>
+                    </Animated.View>
+                </Pressable>
+            </View>
         </Modal>
     );
 }
 
 const styles = StyleSheet.create({
+    overlay: {
+        flex: 1,
+    },
     backdrop: {
         flex: 1,
         justifyContent: 'flex-end',
@@ -155,7 +169,6 @@ const styles = StyleSheet.create({
         borderTopLeftRadius: 20,
         borderTopRightRadius: 20,
         paddingTop: 8,
-        paddingBottom: Platform.OS === 'android' ? 28 : 34,
         paddingHorizontal: 8,
     },
     handle: {

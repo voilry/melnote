@@ -329,18 +329,22 @@ export function ImageToolbar({
                         entering={FadeIn.duration(220).easing(EASE_ENTER)}
                         style={[StyleSheet.absoluteFill, styles.dim]}
                     />
-                    <Pressable style={StyleSheet.absoluteFill} onPress={closeEdit} />
-                    <Animated.View
-                        entering={SHEET_ENTER}
-                        style={[
-                            styles.editSheet,
-                            {
-                                backgroundColor: colors.card,
-                                paddingBottom: 20 + insets.bottom,
-                            },
-                        ]}
-                    >
-                        <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
+                    <Pressable style={styles.sheetBackdrop} onPress={closeEdit}>
+                        <Animated.View
+                            entering={SHEET_ENTER}
+                            style={[
+                                styles.editSheet,
+                                {
+                                    backgroundColor: colors.card,
+                                    // Match the app's bottom sheets: the surface bleeds
+                                    // 100px past the window edge (so it reads as stuck to
+                                    // the bottom) while the content is padded back up.
+                                    paddingBottom: 100 + insets.bottom + 24,
+                                    marginBottom: -100,
+                                },
+                            ]}
+                        >
+                            <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
 
                         <View style={styles.sheetHeader}>
                             <ThemedText style={[styles.sheetTitle, { color: colors.text }]}>
@@ -458,8 +462,9 @@ export function ImageToolbar({
                             </ScalePressable>
                         </View>
                     </Animated.View>
-                </View>
-            </Modal>
+                </Pressable>
+            </View>
+        </Modal>
 
             {/* Photo replacement picker sheet */}
             <PhotoSourceSheet
@@ -694,15 +699,16 @@ const styles = StyleSheet.create({
     },
     sheetOverlay: {
         flex: 1,
+    },
+    sheetBackdrop: {
+        flex: 1,
         justifyContent: 'flex-end',
     },
     editSheet: {
         borderTopLeftRadius: 26,
         borderTopRightRadius: 26,
         paddingTop: 10,
-        paddingBottom: 24,
         paddingHorizontal: 16,
-        maxHeight: '85%',
     },
     sheetHandle: {
         width: 38,
