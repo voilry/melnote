@@ -25,6 +25,7 @@ import { Badge } from '../../components/ui/Badge';
 import { Swipeable } from 'react-native-gesture-handler';
 
 import { QuickScrollButton } from '../../components/ui/QuickScrollButton';
+import { markdownPreviewText } from '../../utils/markdownConverter';
 
 const parseLocalDate = (dateStr: string) => {
     if (!dateStr) return new Date();
@@ -97,7 +98,7 @@ const JournalItem = memo(({ item, index, colors, router, hapticsEnabled, onDelet
                 {item.title ? (
                     <ThemedText type="sectionHeader" style={styles.journalTitle}>{item.title}</ThemedText>
                 ) : null}
-                <ThemedText style={styles.journalContent} numberOfLines={3}>{item.content}</ThemedText>
+                <ThemedText style={styles.journalContent} numberOfLines={3}>{markdownPreviewText(item.content)}</ThemedText>
 
                 {item.tags.length > 0 && (
                     <View style={styles.tagsContainer}>

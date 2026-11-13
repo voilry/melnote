@@ -3,10 +3,11 @@ import { View, ScrollView, TouchableOpacity, StyleSheet, Keyboard, Platform } fr
 import { ThemedText } from './ThemedText';
 import { useAppTheme } from '../../hooks/useAppTheme';
 import { Typography } from '../../constants/Typography';
-import { X, Quotes as Quote, Code, Undo, Redo } from '@/components/ui/Icon';
+import { X, Quotes as Quote, Code, Undo, Redo, PhotoAlbum } from '@/components/ui/Icon';
 import type { EditorBridge } from '@10play/tentap-editor';
 import { useBridgeState } from '@10play/tentap-editor';
 import * as Haptics from 'expo-haptics';
+import { PhotoSourceSheet } from './PhotoSourceSheet';
 
 interface EditorToolbarProps {
     editor: EditorBridge;
@@ -15,11 +16,20 @@ interface EditorToolbarProps {
      * another node type would break the protected title field.
      */
     showHeadingControls?: boolean;
+    /**
+     * Fires when the image source sheet opens/closes. The sheet is a native
+     * Modal: on Android it takes window focus, the keyboard hides, and screens
+     * that mount this toolbar only while the keyboard is up would unmount it —
+     * taking the open sheet down with it. Screens pin the toolbar mounted while
+     * this is true.
+     */
+    onSheetOpenChange?: (open: boolean) => void;
 }
 
 export function EditorToolbar({
     editor,
     showHeadingControls = true,
+    onSheetOpenChange,
 }: EditorToolbarProps) {
     const { colors, hapticsEnabled } = useAppTheme();
     // Hook is called unconditionally (rules of hooks); editor is required.
@@ -46,6 +56,83 @@ export function EditorToolbar({
     const handleAction = (action: () => void) => {
         triggerHaptic();
         action();
+    };
+
+    const [imageSheetVisible, setImageSheetVisible] = React.useState(false);
+    const openImageSheet = () => {
+        setImageSheetVisible(true);
+        onSheetOpenChange?.(true);
+    };
+
+    const closeImageSheet = () => {
+        setImageSheetVisible(false);
+        onSheetOpenChange?.(false);
+    };
+
+    // Never leave the screen pinning a toolbar that no longer exists.
+    React.useEffect(() => () => onSheetOpenChange?.(false), [onSheetOpenChange]);
+
+    /**
+     * Inserts a media image as its own block after the block holding the caret,
+     * followed by an empty paragraph, and parks the caret in that paragraph.
+     * This is the Keep/Notes behaviour: the photo never splits the sentence the
+     * user was writing, and typing continues underneath it.
+     *
+     * Runs in the WebView because the bridge only exposes an insert-at-selection
+     * command, which offers no control over the surrounding blocks.
+     */
+    const insertImageIntoEditor = (fileUri: string) => {
+        const webview = editor?.webviewRef?.current;
+        if (!webview) {
+            editor?.setImage?.(fileUri);
+            return;
+        }
+        webview.injectJavaScript(`
+            (function () {
+                try {
+                    var pm = document.querySelector('.ProseMirror');
+                    var ed = pm && pm.editor;
+                    if (!ed || !ed.state) return false;
+                    var state = ed.state;
+                    var sel = state.selection;
+                    if (!sel || !sel.$from) return false;
+                    var schema = state.schema;
+                    var imageType = schema.nodes.image;
+                    var paragraphType = schema.nodes.paragraph;
+                    if (!imageType || !paragraphType) return false;
+
+                    var imageNode = imageType.create({ src: ${JSON.stringify(fileUri)}, alt: 'Image' });
+                    var paragraph = paragraphType.create();
+                    var $from = sel.$from;
+                    var tr = state.tr;
+                    var caret;
+                    var isEmptyParagraph = $from.depth === 1 &&
+                        $from.parent.type.name === 'paragraph' &&
+                        $from.parent.content.size === 0;
+
+                    if (isEmptyParagraph) {
+                        // Reuse the empty line instead of leaving a gap above.
+                        var start = $from.before(1);
+                        var end = $from.after(1);
+                        tr.replaceWith(start, end, [imageNode, paragraph]);
+                        caret = start + imageNode.nodeSize + 1;
+                    } else {
+                        var pos = $from.after(1);
+                        tr.insert(pos, imageNode);
+                        tr.insert(pos + imageNode.nodeSize, paragraph);
+                        caret = pos + imageNode.nodeSize + 1;
+                    }
+
+                    ed.view.dispatch(tr);
+                    ed.view.focus();
+                    ed.commands.setTextSelection(caret);
+                    return true;
+                } catch (_e) {
+                    return false;
+                }
+            })();
+            true;
+        `);
     };
 
     /**
@@ -101,6 +188,7 @@ export function EditorToolbar({
     };
 
     return (
+        <>
         <View style={[styles.toolbar, { borderTopColor: colors.border + '30', backgroundColor: colors.background }]}>
             <ScrollView
                 horizontal
@@ -213,6 +301,21 @@ export function EditorToolbar({
                 >
                     <Code size={18} color={isCodeActive ? colors.tint : colors.text} />
                 </TouchableOpacity>
+
+                <View style={[styles.toolbarDivider, { backgroundColor: colors.border + '40' }]} />
+
+                {/* Image */}
+                <TouchableOpacity
+                    onPress={() => {
+                        triggerHaptic();
+                        openImageSheet();
+                    }}
+                    style={styles.toolbarButton}
+                    accessibilityRole="button"
+                    accessibilityLabel="Add image"
+                >
+                    <PhotoAlbum size={18} color={colors.text} />
+                </TouchableOpacity>
             </ScrollView>
             <TouchableOpacity 
                 onPress={() => {
@@ -225,6 +328,17 @@ export function EditorToolbar({
                 <X size={18} color={colors.secondary} />
             </TouchableOpacity>
         </View>
+
+        {/* Image source sheet — Keep-style "where from?" choice. */}
+        <PhotoSourceSheet
+            visible={imageSheetVisible}
+            onClose={closeImageSheet}
+            onPicked={(image) => {
+                insertImageIntoEditor(image.uri);
+                triggerHaptic();
+            }}
+        />
+        </>
     );
 }
 

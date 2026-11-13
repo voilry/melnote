@@ -26,6 +26,7 @@ import { Typography } from '../../constants/Typography';
 import { QuickScrollButton } from '../../components/ui/QuickScrollButton';
 import { AlertModal } from '../../components/ui/AlertModal';
 import { useRef } from 'react';
+import { markdownPreviewText } from '../../utils/markdownConverter';
 
 const { width } = Dimensions.get('window');
 const DAY_SIZE = 42; // Fixed smaller size for clean proportion
@@ -240,7 +241,7 @@ export default function CalendarScreen() {
 
         journals.forEach(j => {
             if (j.date && normalizeDateStr(j.date) === dateStr && (j.content?.trim() || j.title?.trim())) {
-                events.push({ type: 'journal', id: j.id, title: j.title || 'Journal Entry', subtitle: j.content?.substring(0, 50), journal: j });
+                events.push({ type: 'journal', id: j.id, title: j.title || 'Journal Entry', subtitle: markdownPreviewText(j.content || '').substring(0, 50), journal: j });
             }
         });
 

@@ -13,6 +13,7 @@ import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useAppTheme } from '../../hooks/useAppTheme';
 import { BlurView } from 'expo-blur';
+import { markdownPreviewText } from '../../utils/markdownConverter';
 
 interface JournalsTabProps {
     journals: any[];
@@ -116,7 +117,7 @@ export function JournalsTab({ journals, personName, onDelete, isAcrylic }: Journ
                                     {item.journal.title ? (
                                         <ThemedText type="sectionHeader" style={styles.journalTitle}>{item.journal.title}</ThemedText>
                                     ) : null}
-                                    <ThemedText style={styles.journalContent} numberOfLines={4}>{item.journal.content}</ThemedText>
+                                    <ThemedText style={styles.journalContent} numberOfLines={4}>{markdownPreviewText(item.journal.content)}</ThemedText>
                                 </Card>
                             </ScalePressable>
                         </Swipeable>

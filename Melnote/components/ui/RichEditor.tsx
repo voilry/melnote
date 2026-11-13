@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { PixelRatio, View, StyleSheet } from 'react-native';
+import { PixelRatio, View, StyleSheet, Keyboard } from 'react-native';
 import { RichText, type EditorBridge } from '@10play/tentap-editor';
 import { useAppTheme } from '../../hooks/useAppTheme';
 import { escapedMentionPatterns } from '../../utils/mentions';
+import { IMAGE_TOOLS_JS } from './imageToolsScript';
+import { imageSelectionFromMessage, type ImageSelection } from '../../utils/imageSelection';
 
 interface RichEditorProps {
     editor: EditorBridge;
@@ -47,6 +49,13 @@ interface RichEditorProps {
     /** @mention query under the caret ('' after bare '@', null = closed). */
     onMentionQuery?: (query: string | null) => void;
     /**
+     * Live image selection (webview → RN). `null` means no image is selected;
+     * screens use this to swap the formatting toolbar for the image toolbar.
+     */
+    onImageSelectionChange?: (selection: ImageSelection | null) => void;
+    /** Triggered when an action button on the image floating menu is pressed. */
+    onImageAction?: (action: 'edit' | 'caption' | 'replace' | 'delete') => void;
+    /**
      * Connection names highlighted as @mentions in the body (journal mode).
      * Streamed into the page for the CSS Custom Highlight painter.
      */
@@ -72,6 +81,8 @@ export const RichEditor: React.FC<RichEditorProps> = ({
     sessionToken = 0,
     onMentionQuery,
     mentionNames,
+    onImageSelectionChange,
+    onImageAction,
 }) => {
     const { colors, theme } = useAppTheme();
 
@@ -90,6 +101,14 @@ export const RichEditor: React.FC<RichEditorProps> = ({
 
     const customCSS = `
         @import url('https://fonts.googleapis.com/css2?family=Figtree:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,400;1,700&display=swap');
+
+        :root {
+            --melnote-tint: ${tintColor} !important;
+            --melnote-text: ${textColor} !important;
+            --melnote-bg: ${bgColor} !important;
+            --melnote-secondary: ${secondaryColor} !important;
+            --melnote-border: ${borderColor} !important;
+        }
 
         *, *::before, *::after { box-sizing: border-box !important; }
 
@@ -267,6 +286,31 @@ export const RichEditor: React.FC<RichEditorProps> = ({
         strong, b { font-weight: 700 !important; font-family: 'Figtree', -apple-system, sans-serif !important; }
         em, i { font-style: italic !important; }
         s, del { text-decoration: line-through !important; opacity: 0.7 !important; }
+
+        /* === IMAGES — mirrors the reader: width/alignment are painted by the
+           injected image tools from the node attrs; these are only defaults
+           for an image that has never been touched. File access is enabled on
+           the WebView so media/<id>.jpg resolves. === */
+        img {
+            display: block !important;
+            width: 100% !important;
+            height: auto !important;
+            max-width: 100% !important;
+            margin: 10px 0 !important;
+            border-radius: 12px !important;
+            background-color: ${surfaceColor} !important;
+            -webkit-touch-callout: none !important;
+            -webkit-user-drag: none !important;
+            -webkit-user-select: none !important;
+            user-select: none !important;
+        }
+        img.ProseMirror-selectednode {
+            outline: none !important;
+        }
+        body.melnote-image-dragging {
+            -webkit-user-select: none !important;
+            user-select: none !important;
+        }
     `;
 
     // Journal edit mode. The Date and Title are plain HTML widgets injected
@@ -1059,9 +1103,20 @@ export const RichEditor: React.FC<RichEditorProps> = ({
                 onTitleFocusChange(msg.value === true);
             } else if (msg.type === 'melnote-mention' && onMentionQuery) {
                 onMentionQuery(typeof msg.value === 'string' ? msg.value : null);
+            } else if (msg.type === 'melnote-image-selection' && onImageSelectionChange) {
+                const sel = imageSelectionFromMessage(msg.value);
+                if (sel?.active) {
+                    Keyboard.dismiss();
+                }
+                onImageSelectionChange(sel);
+            } else if (msg.type === 'melnote-dismiss-keyboard') {
+                Keyboard.dismiss();
+            } else if (msg.type === 'melnote-image-action' && onImageAction) {
+                Keyboard.dismiss();
+                onImageAction((msg as any).action);
             }
         } catch (_err) { /* non-JSON messages are not ours */ }
-    }, [onTitleChange, onTitleFocusChange, onMentionQuery]);
+    }, [onTitleChange, onTitleFocusChange, onMentionQuery, onImageSelectionChange, onImageAction]);
 
     // Stream mention patterns for the editor-side @Name highlighter. Names are
     // regex-escaped RN-side (the injected script is a template literal, so the
@@ -1226,6 +1281,10 @@ export const RichEditor: React.FC<RichEditorProps> = ({
         if (!editor) return;
         editor.injectCSS(resolvedCSS, 'melnote-theme');
         editor.injectJS(enhanceJS);
+        // Selection, corner-handle resize, alignment painting and block
+        // drag-and-drop all need ProseMirror geometry, so they live in the
+        // page. The script is idempotent and retries until the view exists.
+        editor.injectJS(IMAGE_TOOLS_JS);
         syncExpectedDoc();
     }, [editor, resolvedCSS, enhanceJS, syncExpectedDoc]);
 
@@ -1237,11 +1296,15 @@ export const RichEditor: React.FC<RichEditorProps> = ({
             <RichText
                 editor={editor}
                 textZoom={100}
+                /* Note images live in the app sandbox and are injected as
+                   absolute file:// URIs; the WebView needs file scheme access
+                   to paint them. No network origin change. */
+                allowFileAccess
                 style={{ flex: 1, width: '100%', backgroundColor: bgColor }}
                 containerStyle={{ flex: 1, width: '100%', backgroundColor: bgColor }}
                 showsVerticalScrollIndicator={false}
                 onLoad={handleLoad}
-                {...(journalMeta && (onTitleChange || onTitleFocusChange || onMentionQuery)
+                {...((journalMeta && (onTitleChange || onTitleFocusChange || onMentionQuery)) || onImageSelectionChange || onImageAction
                     ? { exclusivelyUseCustomOnMessage: false, onMessage: handleWebviewMessage }
                     : {})}
             />

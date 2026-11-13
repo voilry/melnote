@@ -14,6 +14,7 @@ import { MarkdownText } from '../../components/ui/MarkdownText';
 import { DeleteModal } from '../../components/ui/DeleteModal';
 import { AlertModal } from '../../components/ui/AlertModal';
 import { EditorToolbar } from '../../components/ui/EditorToolbar';
+import { ImageToolbar, type ImageAttrUpdate, type ImageSelection } from '../../components/ui/ImageToolbar';
 import { ScreenHeader } from '../../components/ui/ScreenHeader';
 import { ScalePressable } from '../../components/ui/ScalePressable';
 import { RichEditor } from '../../components/ui/RichEditor';
@@ -21,7 +22,9 @@ import { MentionSuggestionBar, type MentionPerson } from '../../components/ui/Me
 import { PersonRepository } from '../../db/repositories/PersonRepository';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useEditorBridge, TenTapStartKit } from '@10play/tentap-editor';
-import { htmlToMarkdown, markdownToHtml } from '../../utils/markdownConverter';
+import { htmlToMarkdown, markdownToHtml, markdownPreviewText } from '../../utils/markdownConverter';
+import { materializeDataImages } from '../../utils/media';
+import { IMAGE_ALIGN_CODE } from '../../utils/imageSelection';
 import { extractMentionedIds } from '../../utils/mentions';
 import * as Haptics from 'expo-haptics';
 
@@ -106,6 +109,36 @@ export default function JournalEditorScreen() {
 
     const [keyboardHeight, setKeyboardHeight] = useState(0);
     const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+    // Pinned while the image source sheet is open: its native Modal hides the
+    // keyboard, and the toolbar unmounting on keyboard-hide would close it.
+    const [imageSheetOpen, setImageSheetOpen] = useState(false);
+    const [imageSelection, setImageSelection] = useState<ImageSelection | null>(null);
+    const [imageToolsPinned, setImageToolsPinned] = useState(false);
+    const [imageActionTrigger, setImageActionTrigger] = useState<{ action: 'edit' | 'caption' | 'replace' | 'delete'; timestamp: number } | null>(null);
+    // See editor.tsx: keep the bar mounted across focus loss while a sheet or
+    // modal owned by the image toolbar is open.
+    const lastImageSelectionRef = useRef<ImageSelection | null>(null);
+    useEffect(() => {
+        if (imageSelection) lastImageSelectionRef.current = imageSelection;
+    }, [imageSelection]);
+    const shownImageSelection = imageSelection ?? lastImageSelectionRef.current;
+
+    const handleImageSelectionChange = useCallback((selection: ImageSelection | null) => {
+        if (selection?.active) {
+            Keyboard.dismiss();
+        }
+        setImageActionTrigger(null);
+        setImageSelection(selection);
+    }, []);
+
+    const handleImageAction = useCallback((action: 'edit' | 'caption' | 'replace' | 'delete') => {
+        Keyboard.dismiss();
+        setImageActionTrigger({ action, timestamp: Date.now() });
+    }, []);
+
+    const handleActionHandled = useCallback(() => {
+        setImageActionTrigger(null);
+    }, []);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [originalTitle, setOriginalTitle] = useState('');
     const [originalContent, setOriginalContent] = useState('');
@@ -253,6 +286,53 @@ export default function JournalEditorScreen() {
         }
     };
 
+    // Image toolbar actions (see editor.tsx): WebView owns the transaction,
+    // native mirrors the values so the bar reflects the change immediately.
+    const handleImageUpdate = useCallback((update: ImageAttrUpdate) => {
+        const attrs: Record<string, unknown> = {};
+        if (update.width != null) attrs.width = update.width;
+        if (update.align) attrs.height = IMAGE_ALIGN_CODE[update.align];
+        if (update.title !== undefined) attrs.title = update.title;
+        if (update.src) attrs.src = update.src;
+
+        // See editor.tsx: native modals can clear the WebView image selection,
+        // so replay updates against the pinned position.
+        const pos = lastImageSelectionRef.current?.pos;
+        const args = pos == null
+            ? JSON.stringify(attrs)
+            : `${JSON.stringify(attrs)}, ${pos}`;
+        editor.webviewRef.current?.injectJavaScript(
+            `(function(){ if (window.melnoteImageUpdate) window.melnoteImageUpdate(${args}); })(); true;`
+        );
+
+        setImageSelection(prev => prev ? {
+            ...prev,
+            width: update.width ?? prev.width,
+            align: update.align ?? prev.align,
+            caption: update.title !== undefined ? update.title : prev.caption,
+            src: update.src ?? prev.src,
+        } : prev);
+        if (isDataLoadedRef.current) setHasChanges(true);
+    }, [editor]);
+
+    const handleImageDelete = useCallback(() => {
+        const pos = lastImageSelectionRef.current?.pos;
+        const posArg = pos == null ? 'null' : String(pos);
+        editor.webviewRef.current?.injectJavaScript(
+            `(function(){ if (window.melnoteImageDelete) window.melnoteImageDelete(${posArg}); })(); true;`
+        );
+        setImageActionTrigger(null);
+        setImageSelection(null);
+    }, [editor]);
+
+    const handleImageDeselect = useCallback(() => {
+        editor.webviewRef.current?.injectJavaScript(
+            `(function(){ if (window.melnoteImageDeselect) window.melnoteImageDeselect(); })(); true;`
+        );
+        setImageActionTrigger(null);
+        setImageSelection(null);
+    }, [editor]);
+
     const handleSave = async () => {
         setIsSaving(true);
         if (hapticsEnabled && Platform.OS !== 'web') {
@@ -261,7 +341,7 @@ export default function JournalEditorScreen() {
 
         try {
             const html = await editor.getHTML();
-            const markdown = htmlToMarkdown(html);
+            const markdown = htmlToMarkdown(await materializeDataImages(html));
             const finalTitle = title.trim() || 'Untitled';
 
             const mentionedIds = extractMentionedIds(markdown, persons);
@@ -294,6 +374,7 @@ export default function JournalEditorScreen() {
             setOriginalSelectedPeople(mentionedIds);
             setEditorHtml(markdownToHtml(markdown));
             setHasChanges(false);
+            setImageSelection(null);
 
             if (id === 'new') {
                 router.replace(`/journal/${savedId}` as any);
@@ -346,7 +427,7 @@ export default function JournalEditorScreen() {
                 triggerHaptic();
                 const shareTitle = title.trim() ? `${title.trim()}\n` : '';
                 await Share.share({
-                    message: `${shareTitle}Date: ${journal.date}\n\n${content}`,
+                    message: `${shareTitle}Date: ${journal.date}\n\n${markdownPreviewText(content)}`,
                 }, {
                     dialogTitle: `Share: ${title || 'Journal Entry'}`,
                 });
@@ -380,6 +461,7 @@ export default function JournalEditorScreen() {
                                 router.back();
                             } else {
                                 setIsEditing(false);
+                                setImageSelection(null);
                                 setTitle(journal.title || '');
                                 setContent(journal.content || '');
                                 setSelectedPeople(taggedPeople.map((t: any) => t.person.id));
@@ -405,6 +487,7 @@ export default function JournalEditorScreen() {
                                         setIsEditing(true);
                                         setSessionToken(t => t + 1);
                                         setHasChanges(false);
+                                        setImageSelection(null);
                                     }}
                                     style={[styles.headerButton, { backgroundColor: colors.border + '20' }]}
                                     innerStyle={{ borderRadius: 18 }}
@@ -472,6 +555,8 @@ export default function JournalEditorScreen() {
                             }}
                             onTitleFocusChange={setTitleFocused}
                             journalFocusTitle={id === 'new'}
+                            onImageSelectionChange={handleImageSelectionChange}
+                            onImageAction={handleImageAction}
                         />
                     </View>
                 )}
@@ -611,9 +696,19 @@ export default function JournalEditorScreen() {
                         }}
                     />
                 )}
-                {isEditing && isKeyboardVisible && !titleFocused && (
-                    <EditorToolbar editor={editor} />
-                )}
+                {isEditing && !titleFocused && shownImageSelection && (imageSelection?.active || imageToolsPinned) ? (
+                    <ImageToolbar
+                        selection={shownImageSelection}
+                        triggerAction={imageActionTrigger}
+                        onActionHandled={handleActionHandled}
+                        onUpdate={handleImageUpdate}
+                        onDelete={handleImageDelete}
+                        onDeselect={handleImageDeselect}
+                        onSheetOpenChange={setImageToolsPinned}
+                    />
+                ) : isEditing && (isKeyboardVisible || imageSheetOpen) && !titleFocused ? (
+                    <EditorToolbar editor={editor} onSheetOpenChange={setImageSheetOpen} />
+                ) : null}
             </View>
 
             {/* More Options Menu */}
@@ -691,6 +786,7 @@ export default function JournalEditorScreen() {
                         editor.setContent(markdownToHtml(originalContent));
                         setHasChanges(false);
                         setIsEditing(false);
+                        setImageSelection(null);
                     }
                 }}
                 actionLabel="Discard"

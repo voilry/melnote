@@ -11,12 +11,15 @@ import { CaretLeft as ChevronLeft, Check, Pencil as Edit3, X } from '@/component
 import { DeleteModal } from '../components/ui/DeleteModal';
 import { AlertModal } from '../components/ui/AlertModal';
 import { EditorToolbar } from '../components/ui/EditorToolbar';
+import { ImageToolbar, type ImageAttrUpdate, type ImageSelection } from '../components/ui/ImageToolbar';
 import { ScreenHeader } from '../components/ui/ScreenHeader';
 import { ScalePressable } from '../components/ui/ScalePressable';
 import { RichEditor } from '../components/ui/RichEditor';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useEditorBridge, TenTapStartKit } from '@10play/tentap-editor';
 import { markdownToHtml, htmlToMarkdown } from '../utils/markdownConverter';
+import { materializeDataImages } from '../utils/media';
+import { IMAGE_ALIGN_CODE } from '../utils/imageSelection';
 import * as Haptics from 'expo-haptics';
 
 import { useAppTheme } from '../hooks/useAppTheme';
@@ -49,7 +52,39 @@ export default function EditorScreen() {
 
     const [keyboardHeight, setKeyboardHeight] = useState(0);
     const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+    // Pinned while the image source sheet is open: its native Modal hides the
+    // keyboard, and the toolbar unmounting on keyboard-hide would close it.
+    const [imageSheetOpen, setImageSheetOpen] = useState(false);
+    // Contextual image controls: live selection from the WebView, plus a pin
+    // while one of the toolbar's own modals is open.
+    const [imageSelection, setImageSelection] = useState<ImageSelection | null>(null);
+    const [imageToolsPinned, setImageToolsPinned] = useState(false);
+    const [imageActionTrigger, setImageActionTrigger] = useState<{ action: 'edit' | 'caption' | 'replace' | 'delete'; timestamp: number } | null>(null);
+    // Fallback used while one of the toolbar's modals is open: focus changes
+    // can clear the WebView selection, and the bar must not vanish mid-edit.
+    const lastImageSelectionRef = useRef<ImageSelection | null>(null);
+    useEffect(() => {
+        if (imageSelection) lastImageSelectionRef.current = imageSelection;
+    }, [imageSelection]);
+    const shownImageSelection = imageSelection ?? lastImageSelectionRef.current;
     const isDataLoadedRef = useRef(false);
+
+    const handleImageSelectionChange = useCallback((selection: ImageSelection | null) => {
+        if (selection?.active) {
+            Keyboard.dismiss();
+        }
+        setImageActionTrigger(null);
+        setImageSelection(selection);
+    }, []);
+
+    const handleImageAction = useCallback((action: 'edit' | 'caption' | 'replace' | 'delete') => {
+        Keyboard.dismiss();
+        setImageActionTrigger({ action, timestamp: Date.now() });
+    }, []);
+
+    const handleActionHandled = useCallback(() => {
+        setImageActionTrigger(null);
+    }, []);
 
     // editorHtml is null until SQLite data loads. The WebView is gated on this so
     // initialContent is always the real content when the WebView first boots.
@@ -177,7 +212,7 @@ export default function EditorScreen() {
         setIsSaving(true);
         try {
             const html = await editor.getHTML();
-            const markdown = htmlToMarkdown(html);
+            const markdown = htmlToMarkdown(await materializeDataImages(html));
 
             if (isNewEntry) {
                 if (!markdown.trim() && !title.trim()) {
@@ -223,6 +258,7 @@ export default function EditorScreen() {
             setHasChanges(false);
             setIsEditing(false);
             setLastUpdated(new Date());
+            setImageSelection(null);
             Keyboard.dismiss();
         } catch (error) {
             console.error('Failed to save:', error);
@@ -253,12 +289,61 @@ export default function EditorScreen() {
         setTitle(originalTitle);
         setHasChanges(false);
         setIsEditing(false);
+        setImageSelection(null);
     };
 
     // Single hardware-back handler: discard prompt while editing with unsaved
     // changes. (A second, duplicate useFocusEffect handler previously lived
     // here and double-fired this callback.)
 
+
+    // Image toolbar actions. The WebView owns the actual node transaction;
+    // native mirrors the new values locally so the toolbar updates instantly.
+    const handleImageUpdate = useCallback((update: ImageAttrUpdate) => {
+        const attrs: Record<string, unknown> = {};
+        if (update.width != null) attrs.width = update.width;
+        if (update.align) attrs.height = IMAGE_ALIGN_CODE[update.align];
+        if (update.title !== undefined) attrs.title = update.title;
+        if (update.src) attrs.src = update.src;
+
+        // Native modals can blur the WebView and collapse its image selection;
+        // pass the pinned position so caption/edit/replace still land on the
+        // image the toolbar was opened for.
+        const pos = lastImageSelectionRef.current?.pos;
+        const args = pos == null
+            ? JSON.stringify(attrs)
+            : `${JSON.stringify(attrs)}, ${pos}`;
+        editor.webviewRef.current?.injectJavaScript(
+            `(function(){ if (window.melnoteImageUpdate) window.melnoteImageUpdate(${args}); })(); true;`
+        );
+
+        setImageSelection(prev => prev ? {
+            ...prev,
+            width: update.width ?? prev.width,
+            align: update.align ?? prev.align,
+            caption: update.title !== undefined ? update.title : prev.caption,
+            src: update.src ?? prev.src,
+        } : prev);
+        if (isDataLoadedRef.current) setHasChanges(true);
+    }, [editor]);
+
+    const handleImageDelete = useCallback(() => {
+        const pos = lastImageSelectionRef.current?.pos;
+        const posArg = pos == null ? 'null' : String(pos);
+        editor.webviewRef.current?.injectJavaScript(
+            `(function(){ if (window.melnoteImageDelete) window.melnoteImageDelete(${posArg}); })(); true;`
+        );
+        setImageActionTrigger(null);
+        setImageSelection(null);
+    }, [editor]);
+
+    const handleImageDeselect = useCallback(() => {
+        editor.webviewRef.current?.injectJavaScript(
+            `(function(){ if (window.melnoteImageDeselect) window.melnoteImageDeselect(); })(); true;`
+        );
+        setImageActionTrigger(null);
+        setImageSelection(null);
+    }, [editor]);
 
     const renderHeader = () => (
         <ScreenHeader
@@ -337,6 +422,7 @@ export default function EditorScreen() {
                             setIsEditing(true);
                             setSessionToken(t => t + 1);
                             setHasChanges(false);
+                            setImageSelection(null);
                         }}
                         style={[styles.iconButton, { backgroundColor: colors.tint + '10' }]}
                         innerStyle={{ borderRadius: 18 }}
@@ -368,6 +454,8 @@ export default function EditorScreen() {
                             placeholder="Start writing..."
                             expectedDoc={editorHtml ?? undefined}
                             sessionToken={sessionToken}
+                            onImageSelectionChange={handleImageSelectionChange}
+                            onImageAction={handleImageAction}
                         />
                     </View>
                 )}
@@ -391,9 +479,19 @@ export default function EditorScreen() {
                     </ScrollView>
                 )}
 
-                {isEditing && isKeyboardVisible && (
-                    <EditorToolbar editor={editor} />
-                )}
+                {isEditing && shownImageSelection && (imageSelection?.active || imageToolsPinned) ? (
+                    <ImageToolbar
+                        selection={shownImageSelection}
+                        triggerAction={imageActionTrigger}
+                        onActionHandled={handleActionHandled}
+                        onUpdate={handleImageUpdate}
+                        onDelete={handleImageDelete}
+                        onDeselect={handleImageDeselect}
+                        onSheetOpenChange={setImageToolsPinned}
+                    />
+                ) : isEditing && (isKeyboardVisible || imageSheetOpen) ? (
+                    <EditorToolbar editor={editor} onSheetOpenChange={setImageSheetOpen} />
+                ) : null}
             </View>
 
             <DeleteModal

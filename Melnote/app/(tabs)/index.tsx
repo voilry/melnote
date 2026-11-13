@@ -38,6 +38,7 @@ import { GalleryPersonCard } from '../../components/person/GalleryPersonCard';
 import { DashboardGroupCard } from '../../components/person/DashboardGroupCard';
 import { ManageGroupMembersModal } from '../../components/person/ManageGroupMembersModal';
 import { EntryRepository } from '../../db/repositories/EntryRepository';
+import { markdownPreviewText } from '../../utils/markdownConverter';
 import { useSettings } from '../../store/SettingsContext';
 import { AddReminderModal } from '../../components/calendar/AddReminderModal';
 import { DeleteModal } from '../../components/ui/DeleteModal';
@@ -858,7 +859,7 @@ export default function PeopleScreen() {
                                                                     <ThemedText type="defaultSemiBold" numberOfLines={1} style={{ fontSize: 13, marginBottom: 4 }}>{h.title}</ThemedText>
                                                                 )}
                                                                 <ThemedText type="small" numberOfLines={2} style={{ color: colors.secondary, fontSize: 12, lineHeight: 18 }}>
-                                                                    {h.content}
+                                                                    {markdownPreviewText(h.content)}
                                                                 </ThemedText>
                                                             </View>
                                                         </ScalePressable>

@@ -1,9 +1,12 @@
 import React from 'react';
-import { View, StyleSheet, Text, Platform } from 'react-native';
+import { View, StyleSheet, Text, Platform, Image, Pressable } from 'react-native';
 import { ThemedText } from './ThemedText';
 import { useAppTheme } from '../../hooks/useAppTheme';
 import { Typography } from '../../constants/Typography';
 import { escapedMentionPatterns } from '../../utils/mentions';
+import { mediaUri } from '../../utils/media';
+import { ImageViewer, type ViewerImage } from './ImageViewer';
+import { parseMarkdownImage, collectMarkdownImages, type ImageAlign, type MarkdownImageInfo } from '../../utils/markdownConverter';
 
 interface MarkdownTextProps {
     content: string;
@@ -23,8 +26,90 @@ interface MarkdownTextProps {
     mentionNames?: string[];
 }
 
+/**
+ * A note image inside the reader. Width is a percentage of the content column
+ * and alignment mirrors the editor (left / center / right). Dimensions are
+ * read asynchronously so the layout doesn't jump from a wrong default once the
+ * bitmap arrives. Captions render underneath and are also shown in the viewer.
+ */
+const ALIGN_SELF: Record<ImageAlign, 'flex-start' | 'center' | 'flex-end'> = {
+    left: 'flex-start',
+    center: 'center',
+    right: 'flex-end',
+};
+
+const MarkdownImage: React.FC<{ info: MarkdownImageInfo; onPress: () => void }> = ({ info, onPress }) => {
+    const { colors } = useAppTheme();
+    const uri = mediaUri(info.src);
+    const [ratio, setRatio] = React.useState(4 / 3);
+
+    React.useEffect(() => {
+        let alive = true;
+        Image.getSize(
+            uri,
+            (width, height) => {
+                if (alive && width > 0 && height > 0) setRatio(width / height);
+            },
+            () => { }
+        );
+        return () => { alive = false; };
+    }, [uri]);
+
+    const width = Math.max(20, Math.min(100, info.width || 100));
+    const captionAlign = info.align === 'left' ? 'left' : info.align === 'right' ? 'right' : 'center';
+
+    return (
+        <View
+            style={[
+                styles.imageBlock,
+                { width: `${width}%`, alignSelf: ALIGN_SELF[info.align] || 'center' },
+            ]}
+        >
+            <Pressable
+                onPress={onPress}
+                accessibilityRole="imagebutton"
+                accessibilityLabel={info.caption || info.alt || 'Note image'}
+            >
+                <Image
+                    source={{ uri }}
+                    style={[styles.image, { aspectRatio: ratio }]}
+                    resizeMode="cover"
+                />
+            </Pressable>
+            {info.caption ? (
+                <ThemedText
+                    style={[styles.imageCaption, { color: colors.secondary, textAlign: captionAlign }]}
+                >
+                    {info.caption}
+                </ThemedText>
+            ) : null}
+        </View>
+    );
+};
+
 export const MarkdownText: React.FC<MarkdownTextProps> = ({ content, style, paddingHorizontal = 0, mentionNames }) => {
     const { colors } = useAppTheme();
+
+    // Reader image paging: one shared viewer for every image in the entry.
+    // `imageLineIndex` maps a split line number to its position in the image
+    // list so tapping any image opens the viewer on that image.
+    const images = React.useMemo(() => collectMarkdownImages(content), [content]);
+    const imageLineIndex = React.useMemo(() => {
+        const map = new Map<number, number>();
+        let next = 0;
+        content.split(/\r\n|\r|\n/).forEach((line, lineIndex) => {
+            if (parseMarkdownImage(line.trim())) {
+                map.set(lineIndex, next);
+                next += 1;
+            }
+        });
+        return map;
+    }, [content]);
+    const viewerImages = React.useMemo<ViewerImage[]>(
+        () => images.map(image => ({ uri: mediaUri(image.src), caption: image.caption })),
+        [images]
+    );
+    const [viewerIndex, setViewerIndex] = React.useState<number | null>(null);
 
     // Mention matcher: longest-name-first alternation of the provided
     // connection names. Rebuilt only when the name list identity changes.
@@ -57,6 +142,13 @@ export const MarkdownText: React.FC<MarkdownTextProps> = ({ content, style, padd
             const spacerHeight = (style && typeof style.lineHeight === 'number') ? Math.round(style.lineHeight * 0.75) : 18;
             return <View key={index} style={{ height: spacerHeight }} />;
         }
+        // Handle images — block-level, own line (matches the converter).
+        const image = parseMarkdownImage(line);
+        if (image) {
+            const position = imageLineIndex.get(index) ?? 0;
+            return <MarkdownImage key={index} info={image} onPress={() => setViewerIndex(position)} />;
+        }
+
         // Handle Horizontal Rule — explicit check first, then regex fallback
         if (line === '---' || line === '___' || /^[-*_]{3,}$/.test(line)) {
             return (
@@ -286,6 +378,12 @@ export const MarkdownText: React.FC<MarkdownTextProps> = ({ content, style, padd
     return (
         <View style={[styles.container, { paddingHorizontal: paddingHorizontal ?? 0 }]}>
             {content.split(/\r\n|\r|\n/).map((line, i) => parseLine(line, i))}
+            <ImageViewer
+                visible={viewerIndex !== null}
+                images={viewerImages}
+                initialIndex={viewerIndex ?? 0}
+                onClose={() => setViewerIndex(null)}
+            />
         </View>
     );
 };
@@ -341,6 +439,20 @@ const styles = StyleSheet.create({
         width: '100%',
         marginVertical: 14,
         opacity: 0.6,
+    },
+    imageBlock: {
+        marginVertical: 8,
+    },
+    imageCaption: {
+        fontSize: 13,
+        lineHeight: 18,
+        marginTop: 6,
+        opacity: 0.75,
+    },
+    image: {
+        width: '100%',
+        borderRadius: 12,
+        backgroundColor: 'rgba(128, 128, 128, 0.12)',
     },
     blockquote: {
         borderLeftWidth: 4,

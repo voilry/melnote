@@ -3,6 +3,169 @@
  * and HTML (for TenTap / TipTap Rich Editor).
  */
 
+/**
+ * Expands a relative `media/<file>` image reference into a URI the editor
+ * WebView can load. Wired up once by `utils/media.ts`; this module stays free
+ * of Expo/native imports so it can be tested in isolation.
+ */
+let resolveEditorImage: ((ref: string) => string) | null = null;
+
+export function setMarkdownImageResolver(resolver: ((ref: string) => string) | null): void {
+    resolveEditorImage = resolver;
+}
+
+function isMediaReference(src: string): boolean {
+    return /^media\/[^/?#]+$/.test(src || '');
+}
+
+/** Absolute/stored src → relative `media/<file>` reference, or null. */
+function toMediaReference(src: string): string | null {
+    const clean = (src || '').split('?')[0].split('#')[0];
+    if (isMediaReference(clean)) return clean;
+    const marker = '/media/';
+    const index = clean.lastIndexOf(marker);
+    if (index === -1) return null;
+    const name = clean.slice(index + marker.length);
+    if (!name || name.includes('/')) return null;
+    return `media/${name}`;
+}
+
+function escapeAttribute(value: string): string {
+    return (value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
+
+function decodeAttributeValue(value: string): string {
+    return (value || '')
+        .replace(/&quot;/gi, '"')
+        .replace(/&#0*39;|&apos;/gi, "'")
+        .replace(/&lt;/gi, '<')
+        .replace(/&gt;/gi, '>')
+        .replace(/&amp;/gi, '&');
+}
+
+function readAttribute(attributes: string, name: string): string | null {
+    const matcher = new RegExp(`\\b${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, 'i');
+    const match = attributes.match(matcher);
+    if (!match) return null;
+    return decodeAttributeValue(match[1] ?? match[2] ?? match[3] ?? '');
+}
+
+/**
+ * `![alt](media/x.jpg "Optional caption"){width=75 align=left}` — an image on
+ * its own line. Images are block-level in the editor, so a standalone line is
+ * the only shape we produce or accept.
+ *
+ * `width` is a percentage of the editor/reader content width and `align` is
+ * `left | center | right`. Both are optional; the defaults (100 / center)
+ * produce the plain markdown every earlier note already uses.
+ */
+export type ImageAlign = 'left' | 'center' | 'right';
+
+export interface MarkdownImageInfo {
+    alt: string;
+    /** Reference exactly as stored: `media/<file>` or a remote URL. */
+    src: string;
+    /** Caption (markdown title). Empty when the image has no caption. */
+    caption: string;
+    /** Percentage of content width, 20-100. */
+    width: number;
+    align: ImageAlign;
+}
+
+const MARKDOWN_IMAGE_RE = /^!\[([^\]]*)\]\(\s*([^)\s]+?)(?:\s+"((?:\\.|[^"\\])*)")?\s*\)(?:\s*\{([^}]*)\})?$/;
+
+const MIN_IMAGE_WIDTH = 20;
+const MAX_IMAGE_WIDTH = 100;
+
+/**
+ * The editor's image schema has exactly `src/alt/title/width/height`, and
+ * those attributes are the only place a block image can persist extra
+ * metadata. Width carries the percentage; `height` is unused, so it carries
+ * the alignment code. This is invisible in the UI and is translated back to
+ * markdown immediately on save.
+ */
+const ALIGN_CODE: Record<ImageAlign, number> = { left: 1, center: 2, right: 3 };
+
+function alignFromCode(value: string | number | null | undefined): ImageAlign {
+    const code = Number(value);
+    if (code === 1) return 'left';
+    if (code === 3) return 'right';
+    return 'center';
+}
+
+function clampImageWidth(value: number): number {
+    if (!Number.isFinite(value)) return 100;
+    return Math.max(MIN_IMAGE_WIDTH, Math.min(MAX_IMAGE_WIDTH, Math.round(value)));
+}
+
+function unescapeCaption(value: string): string {
+    return (value || '').replace(/\\(["\\])/g, '$1');
+}
+
+function parseImageAttributes(raw: string | undefined): { width: number; align: ImageAlign } {
+    let width = 100;
+    let align: ImageAlign = 'center';
+    if (!raw) return { width, align };
+
+    for (const part of raw.split(/[\s,]+/)) {
+        if (!part) continue;
+        const [key, rawValue] = part.split('=');
+        if (!rawValue) continue;
+        if (key === 'width') {
+            width = clampImageWidth(parseFloat(rawValue.replace('%', '')));
+        } else if (key === 'align') {
+            const value = rawValue.toLowerCase();
+            if (value === 'left' || value === 'center' || value === 'right') align = value;
+        }
+    }
+    return { width, align };
+}
+
+/** Parses one line; returns null when it is not an image block. */
+export function parseMarkdownImage(line: string): MarkdownImageInfo | null {
+    const match = (line || '').trim().match(MARKDOWN_IMAGE_RE);
+    if (!match) return null;
+    const { width, align } = parseImageAttributes(match[4]);
+    return {
+        alt: match[1],
+        src: match[2],
+        caption: unescapeCaption(match[3] || ''),
+        width,
+        align,
+    };
+}
+
+/** Serializes an image back to its one-line markdown form. */
+export function serializeMarkdownImage(image: MarkdownImageInfo): string {
+    const alt = image.alt || '';
+    const caption = image.caption || '';
+    const title = caption
+        ? ` "${caption.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
+        : '';
+    const width = clampImageWidth(image.width);
+    const align = image.align || 'center';
+    const attrs: string[] = [];
+    if (width !== 100) attrs.push(`width=${width}`);
+    if (align !== 'center') attrs.push(`align=${align}`);
+    const suffix = attrs.length ? `{${attrs.join(' ')}}` : '';
+    return `![${alt}](${image.src}${title})${suffix}`;
+}
+
+/** All block images in a document, in reading order (viewer paging). */
+export function collectMarkdownImages(markdown: string): MarkdownImageInfo[] {
+    const images: MarkdownImageInfo[] = [];
+    for (const line of (markdown || '').split(/\r?\n/)) {
+        const image = parseMarkdownImage(line);
+        if (image) images.push(image);
+    }
+    return images;
+}
+
+
 export function markdownToHtml(markdown: string): string {
     if (!markdown || typeof markdown !== 'string' || !markdown.trim()) return '<p></p>';
 
@@ -61,6 +224,33 @@ export function markdownToHtml(markdown: string): string {
                 // paragraph after every save→reload cycle (editor showed a
                 // double gap, reader an extra blank line). Paragraph spacing
                 // comes from <p> margins alone.
+                continue;
+            }
+
+            // Image — always its own block, never inline. Stored references are
+            // relative (`media/<file>`); the WebView needs an absolute URI, so
+            // the resolver expands them here only. Width/alignment ride in the
+            // image node's own width/height attributes (see ALIGN_CODE).
+            const image = parseMarkdownImage(trimmed);
+            if (image) {
+                closeLists();
+                const src = isMediaReference(image.src) && resolveEditorImage
+                    ? resolveEditorImage(image.src)
+                    : image.src;
+                const attributes = [
+                    `src="${escapeAttribute(src)}"`,
+                    `alt="${escapeAttribute(image.alt)}"`,
+                ];
+                if (image.caption) {
+                    attributes.push(`title="${escapeAttribute(image.caption)}"`);
+                }
+                if (image.width !== 100) {
+                    attributes.push(`width="${image.width}"`);
+                }
+                if (image.align !== 'center') {
+                    attributes.push(`height="${ALIGN_CODE[image.align]}"`);
+                }
+                htmlLines.push(`<img ${attributes.join(' ')}>`);
                 continue;
             }
 
@@ -162,6 +352,18 @@ export function markdownToHtml(markdown: string): string {
     }
 }
 
+/**
+ * One-line-ish preview text for list cards. Images become a neutral
+ * `[Image]` marker instead of leaking `![alt](media/…)` into a card.
+ */
+export function markdownPreviewText(markdown: string): string {
+    return (markdown || '')
+        .replace(/\r\n?/g, '\n')
+        .replace(/!\[[^\]]*\]\([^)]*\)(?:\s*\{[^}]*\})?/g, '[Image]')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+}
+
 export function htmlToMarkdown(html: string): string {
     if (!html || !html.trim()) return '';
 
@@ -188,6 +390,24 @@ export function htmlToMarkdown(html: string): string {
             .replace(/&nbsp;|&#160;|&ZeroWidthSpace;|&#8203;|&#x200B;/gi, ' ')
             .replace(/[\s\u200B\uFEFF]/g, '');
         return visible ? block : '';
+    });
+
+    // Images → relative markdown references. Runs before the generic tag
+    // strip, which would otherwise delete the <img> entirely. Absolute paths
+    // are collapsed back to `media/<file>` so stored notes never depend on the
+    // sandbox path (it can change across app updates/restores).
+    md = md.replace(/<img\b([^>]*?)\/?>/gi, (_match, attributes: string) => {
+        const src = readAttribute(attributes, 'src');
+        if (!src) return '';
+        const alt = readAttribute(attributes, 'alt') || '';
+        const caption = readAttribute(attributes, 'title') || '';
+        const reference = toMediaReference(src) ?? src;
+        // Width is a percentage; height is the alignment code written by
+        // markdownToHtml. Any other height (e.g. a legacy pixel value) is
+        // ignored and the image stays centered at its width.
+        const width = clampImageWidth(parseFloat(readAttribute(attributes, 'width') || '100'));
+        const align = alignFromCode(readAttribute(attributes, 'height'));
+        return `\n\n${serializeMarkdownImage({ alt, src: reference, caption, width, align })}\n\n`;
     });
 
     // Headings
