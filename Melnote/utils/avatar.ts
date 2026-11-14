@@ -50,3 +50,26 @@ export async function deleteAvatarFile(uri?: string | null): Promise<void> {
     if (!uri || !uri.startsWith(AVATARS_DIRECTORY)) return;
     await FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => { });
 }
+
+/** Removes every avatar file the app owns. */
+export async function clearAvatarFiles(): Promise<void> {
+    try {
+        const names = await FileSystem.readDirectoryAsync(AVATARS_DIRECTORY);
+        for (const name of names) {
+            if (name.startsWith('.')) continue;
+            await FileSystem.deleteAsync(`${AVATARS_DIRECTORY}${name}`, { idempotent: true });
+        }
+    } catch {
+        // No avatars folder yet - nothing to clear.
+    }
+}
+
+/**
+ * True when a URI points at the app's own avatar storage.
+ *
+ * Anything else (the picker cache, a shared photo, an old backup path) is
+ * outside the app's control and can disappear at any time.
+ */
+export function isStoredAvatar(uri?: string | null): boolean {
+    return !!uri && uri.startsWith(AVATARS_DIRECTORY);
+}

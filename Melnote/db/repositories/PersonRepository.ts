@@ -3,7 +3,8 @@ import { people, entries, journals, journalTags, reminders, relationships, perso
 import { eq, desc, isNotNull, asc, sql, or } from 'drizzle-orm';
 import { InferSelectModel, InferInsertModel } from 'drizzle-orm';
 import * as Notifications from 'expo-notifications';
-import { deleteAvatarFile } from '../../utils/avatar';
+import * as FileSystem from 'expo-file-system/legacy';
+import { deleteAvatarFile, isStoredAvatar, persistAvatar } from '../../utils/avatar';
 
 export type Person = InferSelectModel<typeof people>;
 export type NewPerson = InferInsertModel<typeof people>;
@@ -271,6 +272,45 @@ export class PersonRepository {
             }
             return countB - countA;
         });
+    }
+
+    /**
+     * Moves avatars that still point at the picker's cache into app storage.
+     *
+     * People whose picture was picked before avatars were persisted kept the
+     * temporary picker URI, which Android may purge at any time. This copies
+     * whatever is still there into `avatars/` and points the row at the copy.
+     * A file that is already gone is cleared, so the person falls back to
+     * their initials instead of a broken image.
+     *
+     * Returns how many avatars were moved.
+     */
+    static async migrateAvatars(): Promise<number> {
+        const rows = await this.getAll();
+        let moved = 0;
+
+        for (const person of rows) {
+            const uri = person.avatarUri;
+            if (!uri || isStoredAvatar(uri)) continue;
+
+            try {
+                const info = await FileSystem.getInfoAsync(uri);
+                if (!info.exists) {
+                    await db.update(people).set({ avatarUri: null }).where(eq(people.id, person.id));
+                    continue;
+                }
+
+                const stored = await persistAvatar(uri);
+                if (stored !== uri) {
+                    await db.update(people).set({ avatarUri: stored }).where(eq(people.id, person.id));
+                    moved++;
+                }
+            } catch (e) {
+                console.warn(`Could not migrate avatar for ${person.name}:`, e);
+            }
+        }
+
+        return moved;
     }
 
     static async clearAll(): Promise<void> {

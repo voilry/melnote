@@ -4,6 +4,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Notifications from 'expo-notifications';
 import { ReminderRepository } from './ReminderRepository';
 import { SettingsRepository } from './SettingsRepository';
+import { clearAvatarFiles } from '../../utils/avatar';
 import { eq } from 'drizzle-orm';
 
 export const DataRepository = {
@@ -23,6 +24,8 @@ export const DataRepository = {
         await db.delete(entries);
         await db.delete(people);
         await db.delete(entryTypes);
+        // The avatar files the app owns belong to the people that just went.
+        await clearAvatarFiles();
     },
 
     async exportAllData(options: { embedAvatars?: boolean } = {}): Promise<any> {

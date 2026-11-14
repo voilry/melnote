@@ -3,7 +3,7 @@ import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Notifications from 'expo-notifications';
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { useColorScheme, View, Platform, Text, TextInput, AppState, StyleSheet } from 'react-native';
 import { NavigationBar } from 'expo-navigation-bar';
 import { ScreenMotion } from '../components/ui/ScreenMotion';
@@ -33,6 +33,7 @@ Notifications.setNotificationHandler({
 import { useMigrations } from 'drizzle-orm/expo-sqlite/migrator';
 import { db } from '../db/index';
 import migrations from '../drizzle/migrations';
+import { PersonRepository } from '../db/repositories/PersonRepository';
 import { Colors } from '../constants/Colors';
 import { SettingsProvider, useSettings } from '../store/SettingsContext';
 import { useAppTheme } from '../hooks/useAppTheme';
@@ -91,6 +92,22 @@ function RootLayoutContent() {
   }, [migrationError]);
 
   const hasMigrationFinished = migrationSuccess || isIgnorableMigrationError;
+
+  const avatarMigrationStarted = useRef(false);
+
+  useEffect(() => {
+    // Avatars picked before they were persisted still point at the picker's
+    // cache. Move them into the app's own storage once, so a picture can
+    // never be purged out from under a person.
+    if (!hasMigrationFinished || avatarMigrationStarted.current) return;
+    avatarMigrationStarted.current = true;
+
+    PersonRepository.migrateAvatars()
+      .then((moved) => {
+        if (moved > 0) console.log(`Moved ${moved} avatar(s) into app storage.`);
+      })
+      .catch((e) => console.warn('Avatar migration failed:', e));
+  }, [hasMigrationFinished]);
 
   useEffect(() => {
     if (fontError) {

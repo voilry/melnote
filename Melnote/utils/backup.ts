@@ -31,7 +31,8 @@ function getZipArchive(): ZipArchiveModule | null {
  * assets it points at:
  *
  *   manifest.json   format + version + counts + the files that were captured
- *   data.json       every table (settings included), compact JSON
+ *   data.json       every table (settings included, minus the device-local
+ *                   lock settings), compact JSON
  *   media/          note images, stored under the same relative names the
  *                   markdown already uses, so a restore never has to rewrite
  *                   note content
@@ -48,7 +49,13 @@ export const BACKUP_EXTENSION = '.melnote';
 
 const MEDIA_REF_PATTERN = /media\/[A-Za-z0-9_.-]+\.(?:jpg|jpeg|png|webp|gif)/gi;
 
-/** Settings that stay on the device instead of travelling with a backup. */
+/**
+ * Settings that belong to the device and never travel with a backup.
+ *
+ * The app lock and its biometric prompt are tied to the phone they were set
+ * up on: restoring someone else's lock on a device without enrolled
+ * biometrics would lock the owner out of their own notes.
+ */
 const DEVICE_LOCAL_SETTING_KEYS = ['appLockEnabled', 'biometricEnabled'];
 
 export interface BackupSummary {
@@ -143,6 +150,14 @@ export async function createBackup(): Promise<CreatedBackup> {
         const people: any[] = payload?.data?.people ?? [];
         const journals: any[] = payload?.data?.journals ?? [];
         const entries: any[] = payload?.data?.entries ?? [];
+
+        // The lock settings stay on this device - they are not written to the
+        // archive at all.
+        if (payload?.data?.settings) {
+            const exportedSettings: Record<string, string> = { ...payload.data.settings };
+            for (const key of DEVICE_LOCAL_SETTING_KEYS) delete exportedSettings[key];
+            payload.data.settings = exportedSettings;
+        }
 
         // Avatars travel as files, so the rows only keep a relative name.
         // The picker leaves avatars in the (volatile) cache directory, so each
@@ -413,9 +428,8 @@ export async function restoreBackup(session: BackupSession): Promise<BackupSumma
 
         const settings = payload?.data?.settings;
         if (settings && typeof settings === 'object') {
-            // The lock and its biometric prompt belong to the device, not to
-            // the backup: restoring one must not enable a lock on a phone
-            // that has no biometrics enrolled.
+            // The lock settings were never exported, so the device's current
+            // values are carried over into the restored table.
             const current = await SettingsRepository.getAll();
             const restored = { ...settings };
             for (const key of DEVICE_LOCAL_SETTING_KEYS) {
