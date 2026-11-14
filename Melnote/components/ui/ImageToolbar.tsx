@@ -7,7 +7,6 @@ import {
     Modal,
     Platform,
     Pressable,
-    ScrollView,
     StyleSheet,
     TextInput,
     View,
@@ -19,8 +18,9 @@ import { ThemedText } from './ThemedText';
 import { Icon } from './Icon';
 import { useAppTheme } from '../../hooks/useAppTheme';
 import { Typography } from '../../constants/Typography';
-import { deleteMediaRef, editMediaImage, isImageEditingAvailable, mediaRefFromUri, type MediaEditAction } from '../../utils/media';
+import { deleteMediaRef, editMediaImage, isImageEditingAvailable, mediaRefFromUri, type MediaCropRect, type MediaEditAction } from '../../utils/media';
 import { PhotoSourceSheet } from './PhotoSourceSheet';
+import { ImageCropView } from './ImageCropView';
 import { ScalePressable } from './ScalePressable';
 import type { ImageAttrUpdate, ImageSelection } from '../../utils/imageSelection';
 
@@ -41,13 +41,6 @@ interface ImageToolbarProps {
     /** Fired while a nested sheet/modal is open, so screens can pin the state. */
     onSheetOpenChange?: (open: boolean) => void;
 }
-
-const CROP_PRESETS: { label: string; aspect: number | null }[] = [
-    { label: 'Original', aspect: null },
-    { label: 'Square 1:1', aspect: 1 },
-    { label: '4:3', aspect: 4 / 3 },
-    { label: '16:9', aspect: 16 / 9 },
-];
 
 // Matches the shared modal enter curves used across the app.
 const EASE_ENTER = Easing.bezier(0.05, 0.7, 0.1, 1.0);
@@ -79,7 +72,7 @@ export function ImageToolbar({
     const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
     const [workingSrc, setWorkingSrc] = React.useState(selection.src);
     const [editing, setEditing] = React.useState(false);
-    const [activeCropAspect, setActiveCropAspect] = React.useState<number | null>(null);
+    const [cropOpen, setCropOpen] = React.useState(false);
 
     const handledTriggerTimestampRef = React.useRef<number>(0);
 
@@ -148,7 +141,6 @@ export function ImageToolbar({
         }
         haptic();
         appliedSrcRef.current = null;
-        setActiveCropAspect(null);
         setWorkingSrc(selection.src);
         setEditOpen(true);
         setSheet(true);
@@ -156,9 +148,48 @@ export function ImageToolbar({
 
     const closeEdit = () => {
         if (editing) return;
+        setCropOpen(false);
         removeWorkingFile(workingSrcRef.current);
         setEditOpen(false);
         setSheet(false);
+    };
+
+    const openCrop = () => {
+        if (editing) return;
+        haptic();
+        setCropOpen(true);
+    };
+
+    const closeCrop = () => {
+        if (editing) return;
+        setCropOpen(false);
+    };
+
+    // The crop view converts its frame to source pixels; the native crop runs
+    // here so the working preview keeps the same single-file edit pipeline.
+    const applyCrop = async (rect: MediaCropRect) => {
+        if (editing) return;
+        setEditing(true);
+        const previous = workingSrcRef.current;
+        const result = await editMediaImage(previous, [{ type: 'crop', rect }]);
+        setEditing(false);
+        if (!result) {
+            Alert.alert(
+                'Could not crop image',
+                'Cropping failed for this photo.'
+            );
+            return;
+        }
+        removeWorkingFile(previous);
+        setWorkingSrc(result.uri);
+        setCropOpen(false);
+    };
+
+    const resetEdits = () => {
+        if (editing) return;
+        haptic();
+        removeWorkingFile(workingSrcRef.current);
+        setWorkingSrc(selection.src);
     };
 
     const applyEdit = () => {
@@ -306,7 +337,7 @@ export function ImageToolbar({
                                     innerStyle={{ borderRadius: 14 }}
                                     accessibilityLabel="Save caption"
                                 >
-                                    <ThemedText style={styles.saveBtnText}>
+                                    <ThemedText style={[styles.saveBtnText, { color: colors.tintContrast }]}>
                                         Save Caption
                                     </ThemedText>
                                 </ScalePressable>
@@ -322,7 +353,7 @@ export function ImageToolbar({
                 transparent
                 animationType="none"
                 statusBarTranslucent
-                onRequestClose={closeEdit}
+                onRequestClose={() => (cropOpen ? closeCrop() : closeEdit())}
             >
                 <View style={styles.sheetOverlay}>
                     <Animated.View
@@ -350,6 +381,20 @@ export function ImageToolbar({
                             <ThemedText style={[styles.sheetTitle, { color: colors.text }]}>
                                 Edit Photo
                             </ThemedText>
+                            {workingSrc !== selection.src && (
+                                <ScalePressable
+                                    onPress={resetEdits}
+                                    disabled={editing}
+                                    haptic={false}
+                                    style={styles.resetButton}
+                                    innerStyle={{ borderRadius: 10 }}
+                                    accessibilityLabel="Reset photo edits"
+                                >
+                                    <ThemedText style={[styles.resetText, { color: colors.tint }]}>
+                                        Reset
+                                    </ThemedText>
+                                </ScalePressable>
+                            )}
                         </View>
 
                         <View style={[styles.previewFrame, { backgroundColor: colors.surface }]}>
@@ -365,77 +410,61 @@ export function ImageToolbar({
                             )}
                         </View>
 
-                        <View style={styles.editActions}>
+                        <ScalePressable
+                            onPress={openCrop}
+                            disabled={editing}
+                            haptic={false}
+                            style={[styles.cropAction, { backgroundColor: colors.surface }]}
+                            innerStyle={{ borderRadius: 16 }}
+                            accessibilityLabel="Crop photo"
+                        >
+                            <View style={[styles.cropActionIcon, { backgroundColor: colors.card }]}>
+                                <Icon name="aspect_ratio_line" size={20} color={colors.text} />
+                            </View>
+                            <View style={styles.cropActionCopy}>
+                                <ThemedText style={[styles.cropActionTitle, { color: colors.text }]}>
+                                    Crop
+                                </ThemedText>
+                                <ThemedText
+                                    numberOfLines={1}
+                                    style={[styles.cropActionHint, { color: colors.secondary }]}
+                                >
+                                    Free or locked aspect
+                                </ThemedText>
+                            </View>
+                            <Icon name="right_line" size={18} color={colors.secondary} />
+                        </ScalePressable>
+
+                        <View style={styles.transformRow}>
                             <EditAction
                                 icon="refresh_anticlockwise_1_line"
                                 label="Rotate -90°"
                                 color={colors.text}
+                                background={colors.surface}
                                 onPress={() => runEdit({ type: 'rotate', degrees: -90 })}
                             />
                             <EditAction
                                 icon="refresh_1_line"
                                 label="Rotate +90°"
                                 color={colors.text}
+                                background={colors.surface}
                                 onPress={() => runEdit({ type: 'rotate', degrees: 90 })}
                             />
                             <EditAction
                                 icon="flip_horizontal_line"
                                 label="Flip H"
                                 color={colors.text}
+                                background={colors.surface}
                                 onPress={() => runEdit({ type: 'flip', axis: 'horizontal' })}
                             />
                             <EditAction
                                 icon="flip_vertical_line"
                                 label="Flip V"
                                 color={colors.text}
+                                background={colors.surface}
                                 onPress={() => runEdit({ type: 'flip', axis: 'vertical' })}
                             />
                         </View>
-
-                        <ThemedText style={[styles.cropLabel, { color: colors.secondary }]}>
-                            Aspect Presets
-                        </ThemedText>
-                        <ScrollView
-                            horizontal
-                            showsHorizontalScrollIndicator={false}
-                            contentContainerStyle={styles.cropRow}
-                        >
-                            {CROP_PRESETS.map(preset => {
-                                const active = activeCropAspect === preset.aspect;
-                                return (
-                                    <ScalePressable
-                                        key={preset.label}
-                                        disabled={editing}
-                                        haptic={false}
-                                        onPress={() => {
-                                            setActiveCropAspect(preset.aspect);
-                                            if (preset.aspect === null) {
-                                                removeWorkingFile(workingSrcRef.current);
-                                                setWorkingSrc(selection.src);
-                                                haptic();
-                                                return;
-                                            }
-                                            runEdit({ type: 'crop', aspect: preset.aspect });
-                                        }}
-                                        style={[
-                                            styles.cropChip,
-                                            { backgroundColor: active ? colors.tint + '22' : colors.surface },
-                                        ]}
-                                        innerStyle={{ borderRadius: 12 }}
-                                        accessibilityLabel={preset.label}
-                                    >
-                                        <ThemedText
-                                            style={[
-                                                styles.cropChipText,
-                                                { color: active ? colors.tint : colors.text },
-                                            ]}
-                                        >
-                                            {preset.label}
-                                        </ThemedText>
-                                    </ScalePressable>
-                                );
-                            })}
-                        </ScrollView>
 
                         <View style={styles.sheetFooter}>
                             <ScalePressable
@@ -456,13 +485,27 @@ export function ImageToolbar({
                                 innerStyle={{ borderRadius: 14 }}
                                 accessibilityLabel="Apply photo changes"
                             >
-                                <ThemedText style={styles.saveBtnText}>
+                                <ThemedText style={[styles.saveBtnText, { color: colors.tintContrast }]}>
                                     Apply Changes
                                 </ThemedText>
                             </ScalePressable>
                         </View>
                     </Animated.View>
                 </Pressable>
+
+                {cropOpen && (
+                    <Animated.View
+                        entering={FadeIn.duration(200).easing(EASE_ENTER)}
+                        style={StyleSheet.absoluteFill}
+                    >
+                        <ImageCropView
+                            uri={workingSrc}
+                            busy={editing}
+                            onCancel={closeCrop}
+                            onConfirm={applyCrop}
+                        />
+                    </Animated.View>
+                )}
             </View>
         </Modal>
 
@@ -554,19 +597,21 @@ function EditAction({
     icon,
     label,
     color,
+    background,
     onPress,
 }: {
     icon: any;
     label: string;
     color: string;
+    background: string;
     onPress: () => void;
 }) {
     return (
         <ScalePressable
             onPress={onPress}
             haptic={false}
-            style={styles.editAction}
-            innerStyle={{ borderRadius: 12 }}
+            style={[styles.editAction, { backgroundColor: background }]}
+            innerStyle={{ borderRadius: 14 }}
             accessibilityLabel={label}
         >
             <Icon name={icon} size={20} color={color} />
@@ -695,7 +740,6 @@ const styles = StyleSheet.create({
     saveBtnText: {
         fontSize: 15,
         fontFamily: Typography.fontFamily.semibold,
-        color: '#ffffff',
     },
     sheetOverlay: {
         flex: 1,
@@ -726,6 +770,17 @@ const styles = StyleSheet.create({
         fontSize: 17,
         fontFamily: Typography.fontFamily.bold,
     },
+    resetButton: {
+        position: 'absolute',
+        right: 0,
+        top: 0,
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+    },
+    resetText: {
+        fontSize: 13,
+        fontFamily: Typography.fontFamily.semibold,
+    },
     previewFrame: {
         height: 210,
         borderRadius: 16,
@@ -743,45 +798,54 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
     },
-    editActions: {
-        flexDirection: 'row',
-        gap: 8,
-        marginTop: 14,
-    },
     editAction: {
         flex: 1,
+        height: 62,
         alignItems: 'center',
         justifyContent: 'center',
-        gap: 4,
-        paddingVertical: 10,
-        borderRadius: 12,
-        backgroundColor: 'rgba(128, 128, 128, 0.1)',
+        gap: 6,
+        borderRadius: 14,
     },
     editActionLabel: {
         fontSize: 11,
         fontFamily: Typography.fontFamily.medium,
         textAlign: 'center',
     },
-    cropLabel: {
-        fontSize: 11,
-        fontFamily: Typography.fontFamily.semibold,
-        letterSpacing: 0.8,
-        marginTop: 16,
-        marginBottom: 8,
-    },
-    cropRow: {
-        gap: 8,
-        paddingRight: 8,
-    },
-    cropChip: {
-        borderRadius: 12,
-        paddingHorizontal: 14,
-        paddingVertical: 7,
+    cropAction: {
+        flexDirection: 'row',
         alignItems: 'center',
+        gap: 12,
+        height: 62,
+        paddingHorizontal: 12,
+        borderRadius: 16,
+        marginTop: 14,
     },
-    cropChipText: {
-        fontSize: 13,
+    cropActionIcon: {
+        width: 38,
+        height: 38,
+        borderRadius: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    cropActionCopy: {
+        flex: 1,
+        justifyContent: 'center',
+    },
+    cropActionTitle: {
+        fontSize: 15,
+        lineHeight: 19,
         fontFamily: Typography.fontFamily.semibold,
+    },
+    cropActionHint: {
+        fontSize: 11.5,
+        lineHeight: 15,
+        fontFamily: Typography.fontFamily.regular,
+        marginTop: 1,
+    },
+    transformRow: {
+        flexDirection: 'row',
+        gap: 8,
+        marginTop: 8,
     },
     sheetFooter: {
         flexDirection: 'row',

@@ -202,36 +202,36 @@ export function isImageEditingAvailable(): boolean {
     return getImageManipulator() !== null;
 }
 
+/** Source-pixel crop window, in the coordinates of the image as displayed. */
+export interface MediaCropRect {
+    originX: number;
+    originY: number;
+    width: number;
+    height: number;
+}
+
 export type MediaEditAction =
     | { type: 'rotate'; degrees: number }
     | { type: 'flip'; axis: 'horizontal' | 'vertical' }
-    | { type: 'crop'; aspect: number | null };
+    | { type: 'crop'; rect: MediaCropRect };
 
-/** Center-crops the given dimensions to `aspect` (width / height). */
-function centerCropRect(
+/** Clamps a crop window to the decoded bitmap and returns whole pixels. */
+function clampCropRect(
     width: number,
     height: number,
-    aspect: number
-): { originX: number; originY: number; width: number; height: number } | null {
-    if (!width || !height || !Number.isFinite(aspect) || aspect <= 0) return null;
-    const current = width / height;
-    if (Math.abs(current - aspect) < 0.01) return null;
-    if (current > aspect) {
-        const cropWidth = Math.max(1, Math.round(height * aspect));
-        return {
-            originX: Math.max(0, Math.round((width - cropWidth) / 2)),
-            originY: 0,
-            width: cropWidth,
-            height,
-        };
+    rect: MediaCropRect
+): MediaCropRect | null {
+    if (!width || !height || !rect) return null;
+    const originX = Math.max(0, Math.min(width - 1, Math.round(rect.originX)));
+    const originY = Math.max(0, Math.min(height - 1, Math.round(rect.originY)));
+    const cropWidth = Math.max(1, Math.min(width - originX, Math.round(rect.width)));
+    const cropHeight = Math.max(1, Math.min(height - originY, Math.round(rect.height)));
+    if (!cropWidth || !cropHeight) return null;
+    // Nothing to crop: the frame covers the whole bitmap.
+    if (originX === 0 && originY === 0 && cropWidth === width && cropHeight === height) {
+        return null;
     }
-    const cropHeight = Math.max(1, Math.round(width / aspect));
-    return {
-        originX: 0,
-        originY: Math.max(0, Math.round((height - cropHeight) / 2)),
-        width,
-        height: cropHeight,
-    };
+    return { originX, originY, width: cropWidth, height: cropHeight };
 }
 
 /**
@@ -266,17 +266,17 @@ export async function editMediaImage(
 
         let rendered = hasTransform ? await context.renderAsync() : null;
 
-        // Crop is applied after rotation/flip so the preset refers to the image
-        // the user is looking at on screen.
+        // Crop is applied after rotation/flip so its rect refers to the image
+        // the user was looking at on screen.
         const crop = [...actions].reverse().find(
             (action): action is Extract<MediaEditAction, { type: 'crop' }> =>
                 action.type === 'crop'
         );
-        if (crop && crop.aspect) {
+        if (crop) {
             if (!rendered) {
                 rendered = await manipulator.ImageManipulator.manipulate(mediaUri(src)).renderAsync();
             }
-            const rect = centerCropRect(rendered.width, rendered.height, crop.aspect);
+            const rect = clampCropRect(rendered.width, rendered.height, crop.rect);
             if (rect) {
                 rendered = await manipulator.ImageManipulator.manipulate(rendered)
                     .crop(rect)
