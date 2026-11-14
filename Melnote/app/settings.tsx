@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, Alert, Platform, Share, Linking, Pressable } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { ThemedView } from '../components/ui/ThemedView';
@@ -17,6 +17,7 @@ import {
     createBackup,
     openBackup,
     restoreBackup,
+    saveBackupToFolder,
     type BackupSession,
     type BackupSummary,
 } from '../utils/backup';
@@ -44,6 +45,12 @@ export default function SettingsScreen() {
     const [showClearData, setShowClearData] = useState(false);
     const [showResetSettings, setShowResetSettings] = useState(false);
     const [importedDataToRestore, setImportedDataToRestore] = useState<BackupSession | null>(null);
+    // The Android folder picker only allows one permission request at a time,
+    // so a second tap while the first one is open has to be ignored.
+    const exportingRef = useRef(false);
+    const importingRef = useRef(false);
+    const [isExporting, setIsExporting] = useState(false);
+    const [isImporting, setIsImporting] = useState(false);
     const [alertConfig, setAlertConfig] = useState<{ visible: boolean, title: string, description: string, type: 'success' | 'error' | 'info' | 'warning', onClose?: () => void } | null>(null);
 
 
@@ -63,6 +70,12 @@ export default function SettingsScreen() {
     };
 
     const handleExportData = async () => {
+        // The native permission request rejects with "You have an unfinished
+        // permission request" when it is started while another one is still
+        // pending, so overlapping taps are ignored instead of failing.
+        if (exportingRef.current) return;
+        exportingRef.current = true;
+        setIsExporting(true);
         try {
             triggerHaptic(Haptics.ImpactFeedbackStyle.Medium);
 
@@ -95,30 +108,12 @@ export default function SettingsScreen() {
                     }
 
                     try {
-                        const uri = await SAF.createFileAsync(
-                            permissions.directoryUri,
-                            backup.fileName,
-                            'application/zip'
-                        );
-                        // The archive is binary, so it travels as base64 into the
-                        // document the user picked.
-                        const base64 = await FileSystem.readAsStringAsync(backup.uri, {
-                            encoding: FileSystem.EncodingType.Base64,
-                        });
-                        await FileSystem.writeAsStringAsync(uri, base64, {
-                            encoding: FileSystem.EncodingType.Base64,
-                        });
-                        // The archive now lives in the folder the user picked.
-                        await FileSystem.deleteAsync(backup.uri, { idempotent: true }).catch(() => { });
-                        showAlert(
-                            "Backup saved",
-                            `${summary}${formatSize(backup.size) ? ` • ${formatSize(backup.size)}` : ''}\n\n${backup.missingMedia.length ? `${backup.missingMedia.length} image(s) referenced by a note were missing and are not in this backup.` : 'All images are included.'}`,
-                            backup.missingMedia.length ? 'warning' : 'success'
-                        );
-                        return;
-                    } catch (safErr: any) {
-                        console.warn('SAF folder write error:', safErr);
-                        const msg = String(safErr?.message || '');
+                        // The archive is copied into the folder natively, so even
+                        // a large backup never travels through JS memory.
+                        await saveBackupToFolder(backup, permissions.directoryUri);
+                    } catch (folderError: any) {
+                        console.warn('Folder write error:', folderError);
+                        const msg = String(folderError?.message || '');
                         if (msg.includes('writable') || msg.includes('msd') || msg.includes('downloads')) {
                             showAlert(
                                 "Folder Restricted",
@@ -128,12 +123,21 @@ export default function SettingsScreen() {
                         } else {
                             showAlert(
                                 "Export Error",
-                                `Could not write to the selected folder: ${safErr?.message || "Please choose another folder."}`,
+                                `Could not write to the selected folder: ${folderError?.message || "Please choose another folder."}`,
                                 "error"
                             );
                         }
                         return;
                     }
+
+                    // The archive now lives in the folder the user picked.
+                    await FileSystem.deleteAsync(backup.uri, { idempotent: true }).catch(() => { });
+                    showAlert(
+                        "Backup saved",
+                        `${summary}${formatSize(backup.size) ? ` • ${formatSize(backup.size)}` : ''}\n\n${backup.missingMedia.length ? `${backup.missingMedia.length} image(s) referenced by a note were missing and are not in this backup.` : 'All images are included.'}`,
+                        backup.missingMedia.length ? 'warning' : 'success'
+                    );
+                    return;
                 }
             }
 
@@ -154,10 +158,17 @@ export default function SettingsScreen() {
         } catch (error: any) {
             console.error('Export error:', error);
             showAlert("Export Failed", `There was an error generating your backup file: ${error?.message || "Please try again."}`, "error");
+        } finally {
+            exportingRef.current = false;
+            setIsExporting(false);
         }
     };
 
     const handleImportData = async () => {
+        // The document picker cannot be opened twice at the same time.
+        if (importingRef.current) return;
+        importingRef.current = true;
+        setIsImporting(true);
         try {
             const result = await DocumentPicker.getDocumentAsync({
                 type: '*/*',
@@ -171,6 +182,9 @@ export default function SettingsScreen() {
             setImportedDataToRestore(session);
         } catch (error: any) {
             showAlert("Import Failed", error?.message || "Could not read the backup file.", "error");
+        } finally {
+            importingRef.current = false;
+            setIsImporting(false);
         }
     };
 
@@ -447,12 +461,14 @@ export default function SettingsScreen() {
                             label="Export Data"
                             icon={<Share2 size={20} color={colors.secondary} />}
                             onPress={handleExportData}
+                            disabled={isExporting}
                             colors={colors}
                         />
                         <MenuOption
                             label="Import Data"
                             icon={<Download size={20} color={colors.secondary} />}
                             onPress={handleImportData}
+                            disabled={isImporting}
                             colors={colors}
                         />
                         <MenuOption
@@ -631,9 +647,9 @@ function SettingRow({ label, description, icon, children, colors, style }: any) 
     );
 }
 
-function MenuOption({ label, description, icon, onPress, colors, isDestructive, rightIcon, noBackground, borderRadius, scale = true, badge }: any) {
+function MenuOption({ label, description, icon, onPress, colors, isDestructive, rightIcon, noBackground, borderRadius, scale = true, badge, disabled }: any) {
     const content = (
-        <View style={[styles.optionRow, !description && { paddingVertical: 12 }]}>
+        <View style={[styles.optionRow, !description && { paddingVertical: 12 }, disabled && { opacity: 0.4 }]}>
             <View style={styles.optionLabelGroup}>
                 {icon && (
                     <View style={[
@@ -656,7 +672,7 @@ function MenuOption({ label, description, icon, onPress, colors, isDestructive, 
         </View>
     );
 
-    if (!onPress) return content;
+    if (!onPress || disabled) return content;
 
     return (
         <ScalePressable

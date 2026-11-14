@@ -85,6 +85,8 @@ export interface BackupSession {
     payload?: any;
     /** Parsed legacy JSON export (legacy only). */
     legacy?: any;
+    /** Local copy of the picked file, when one had to be made (content://). */
+    tempFile?: string;
     summary: BackupSummary;
 }
 
@@ -93,9 +95,47 @@ function stripScheme(path: string): string {
     return path.startsWith('file://') ? path.slice('file://'.length) : path;
 }
 
+/**
+ * The exact opposite of `stripScheme`: a path that is always a valid `file://`
+ * URI.
+ *
+ * `FileSystem.cacheDirectory` already carries the scheme, so prefixing it
+ * again would produce `file://file:///data/...` and every read of that URI
+ * would fail.
+ */
+function toFileUri(path: string): string {
+    if (!path) return path;
+    return path.startsWith('file://') ? path : `file://${path}`;
+}
+
 function fileNameOf(uri: string): string {
     const clean = stripScheme(uri).split('?')[0];
     return clean.substring(clean.lastIndexOf('/') + 1);
+}
+
+/**
+ * Makes sure the picked backup is a local file the native zip engine can open.
+ *
+ * The document picker usually hands back a `file://` copy, but on some
+ * Android setups it returns a `content://` URI, which the zip module cannot
+ * read directly. In that case the file is copied into the cache first.
+ */
+async function localizeBackup(fileUri: string): Promise<{ path: string; tempFile?: string }> {
+    if (!fileUri || fileUri.startsWith('file://')) return { path: fileUri };
+
+    const local = `${cacheRoot()}melnote-picked-${Date.now()}.melnote`;
+    try {
+        const base64 = await FileSystem.readAsStringAsync(fileUri, {
+            encoding: FileSystem.EncodingType.Base64,
+        });
+        await FileSystem.writeAsStringAsync(local, base64, {
+            encoding: FileSystem.EncodingType.Base64,
+        });
+        return { path: local, tempFile: local };
+    } catch (error) {
+        console.warn('Could not copy the picked backup into the cache:', error);
+        return { path: fileUri };
+    }
 }
 
 async function ensureDirectory(dir: string): Promise<void> {
@@ -236,7 +276,7 @@ export async function createBackup(): Promise<CreatedBackup> {
         const size = info.exists && 'size' in info ? Number((info as any).size) || 0 : 0;
 
         return {
-            uri: `file://${archivePath}`,
+            uri: toFileUri(archivePath),
             fileName,
             size,
             formatVersion: BACKUP_VERSION,
@@ -260,13 +300,14 @@ export async function createBackup(): Promise<CreatedBackup> {
 export async function openBackup(fileUri: string): Promise<BackupSession> {
     const root = cacheRoot();
     const dir = `${root}melnote-restore-${Date.now()}/`;
+    const { path: source, tempFile } = await localizeBackup(fileUri);
 
     let extracted = false;
     try {
         const zipper = getZipArchive();
         if (!zipper) throw new Error('Backup needs a newer build of Melnote. Update the app and try again.');
         await ensureDirectory(dir);
-        await zipper.unzip(stripScheme(fileUri), stripScheme(dir));
+        await zipper.unzip(stripScheme(source), stripScheme(dir));
         extracted = true;
     } catch {
         extracted = false;
@@ -295,6 +336,7 @@ export async function openBackup(fileUri: string): Promise<BackupSession> {
                 kind: 'archive',
                 dir,
                 payload,
+                tempFile,
                 summary: {
                     formatVersion: manifest.formatVersion,
                     createdAt: manifest.createdAt,
@@ -308,6 +350,7 @@ export async function openBackup(fileUri: string): Promise<BackupSession> {
             };
         } catch (error: any) {
             await removeDirectory(dir);
+            if (tempFile) await FileSystem.deleteAsync(tempFile, { idempotent: true }).catch(() => { });
             throw error;
         }
     }
@@ -316,7 +359,7 @@ export async function openBackup(fileUri: string): Promise<BackupSession> {
 
     // Not a zip container - fall back to the legacy JSON export format.
     try {
-        const raw = await FileSystem.readAsStringAsync(fileUri);
+        const raw = await FileSystem.readAsStringAsync(source);
         const legacy = JSON.parse(raw);
         if (!legacy || typeof legacy !== 'object') {
             throw new Error('The backup file is empty.');
@@ -325,6 +368,7 @@ export async function openBackup(fileUri: string): Promise<BackupSession> {
         return {
             kind: 'legacy',
             legacy,
+            tempFile,
             summary: {
                 formatVersion: 1,
                 createdAt: legacy.exportedAt,
@@ -337,14 +381,83 @@ export async function openBackup(fileUri: string): Promise<BackupSession> {
             },
         };
     } catch (legacyError: any) {
+        if (tempFile) await FileSystem.deleteAsync(tempFile, { idempotent: true }).catch(() => { });
         throw new Error(legacyError?.message || 'This file is not a valid Melnote backup.');
     }
+}
+
+/**
+ * The JavaScript `File`/`Directory` wrappers normalise every URI through
+ * `Paths.join`, which rewrites `content://host/...` into `content:/host/...`.
+ * Android then no longer recognises the URI as a Storage Access Framework
+ * tree, so a copy into a picked folder fails before it even starts.
+ *
+ * The native classes take the URI exactly as it is handed to them, so SAF
+ * destinations are built with them directly instead of through the wrappers.
+ * They are looked up lazily, the same way the zip engine is, so a build
+ * without the new file system API only loses the fast export path.
+ */
+type NativeFileHandle = {
+    copy: (destination: unknown, options?: { overwrite?: boolean }) => Promise<void>;
+};
+type NativeFileConstructor = new (uri: string) => NativeFileHandle;
+type NativeDirectoryConstructor = new (uri: string) => unknown;
+
+function nativeFileSystemClasses(): { File: NativeFileConstructor; Directory: NativeDirectoryConstructor } | null {
+    try {
+        const module = require('expo-file-system') as { File: unknown; Directory: unknown };
+        const NativeFile = Object.getPrototypeOf(module.File) as NativeFileConstructor;
+        const NativeDirectory = Object.getPrototypeOf(module.Directory) as NativeDirectoryConstructor;
+        if (typeof NativeFile !== 'function' || typeof NativeDirectory !== 'function') return null;
+        return { File: NativeFile, Directory: NativeDirectory };
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Writes the archive into the folder the user picked on Android.
+ *
+ * The fast path copies the file natively: Android streams it from the app
+ * cache into the folder in 64 KB chunks, so even a large backup never
+ * travels through JS memory (the base64 route below would need several
+ * times the file size in heap).
+ *
+ * If the native copy is not available, the base64 write is used instead, so
+ * a backup always gets saved.
+ */
+export async function saveBackupToFolder(backup: CreatedBackup, directoryUri: string): Promise<void> {
+    const native = nativeFileSystemClasses();
+    if (native) {
+        try {
+            const source = new native.File(backup.uri);
+            const folder = new native.Directory(directoryUri);
+            await source.copy(folder, { overwrite: true });
+            return;
+        } catch (nativeError) {
+            console.warn('Native folder copy failed, falling back to base64:', nativeError);
+        }
+    }
+
+    const SAF = (FileSystem as any).StorageAccessFramework;
+    if (!SAF) throw new Error('This device cannot save files to a folder.');
+
+    const fileUri = await SAF.createFileAsync(directoryUri, backup.fileName, 'application/zip');
+    const base64 = await FileSystem.readAsStringAsync(backup.uri, {
+        encoding: FileSystem.EncodingType.Base64,
+    });
+    await FileSystem.writeAsStringAsync(fileUri, base64, {
+        encoding: FileSystem.EncodingType.Base64,
+    });
 }
 
 /** Releases the extraction folder of a session. */
 export async function closeBackup(session: BackupSession | null): Promise<void> {
     if (session?.kind === 'archive' && session.dir) {
         await removeDirectory(session.dir);
+    }
+    if (session?.tempFile) {
+        await FileSystem.deleteAsync(session.tempFile, { idempotent: true }).catch(() => { });
     }
 }
 
@@ -447,5 +560,8 @@ export async function restoreBackup(session: BackupSession): Promise<BackupSumma
         throw error;
     } finally {
         await removeDirectory(dir);
+        if (session.tempFile) {
+            await FileSystem.deleteAsync(session.tempFile, { idempotent: true }).catch(() => { });
+        }
     }
 }
