@@ -1,5 +1,6 @@
 import { View, StyleSheet, TextInput, TouchableOpacity, ScrollView, Platform, Keyboard, BackHandler, LayoutAnimation } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack, useFocusEffect } from 'expo-router';
+import Animated, { Easing, FadeIn, FadeOut } from 'react-native-reanimated';
 import { ThemedView } from '../components/ui/ThemedView';
 import { ThemedText } from '../components/ui/ThemedText';
 import { MarkdownText } from '../components/ui/MarkdownText';
@@ -114,11 +115,33 @@ export default function EditorScreen() {
         return content.trim() ? content.trim().split(/\s+/).filter(Boolean).length : 0;
     }, [content]);
 
+    // Leaving edit mode keeps the note open and shows the reader. Only a brand
+    // new entry (which has no reader state) pops the screen.
+    const exitEditMode = useCallback(() => {
+        Keyboard.dismiss();
+        setContent(originalContent);
+        setTitle(originalTitle);
+        setHasChanges(false);
+        setEditingTitle(false);
+        setImageSelection(null);
+        setImageActionTrigger(null);
+        setImageToolsPinned(false);
+        setIsEditing(false);
+    }, [originalContent, originalTitle]);
+
+    // Hardware back mirrors the header button: discard prompt, then return to
+    // the reader instead of closing the note.
     useFocusEffect(
         useCallback(() => {
             const onBackPress = () => {
-                if (isEditing && hasChanges) {
-                    setShowDiscardModal(true);
+                if (isEditing) {
+                    if (hasChanges) {
+                        setShowDiscardModal(true);
+                    } else if (isNewEntry) {
+                        return false;
+                    } else {
+                        exitEditMode();
+                    }
                     return true;
                 }
                 return false;
@@ -126,7 +149,7 @@ export default function EditorScreen() {
 
             const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
             return () => subscription.remove();
-        }, [isEditing, hasChanges])
+        }, [isEditing, hasChanges, exitEditMode, isNewEntry])
     );
 
     useEffect(() => {
@@ -269,8 +292,14 @@ export default function EditorScreen() {
     };
 
     const handleBack = () => {
-        if (isEditing && hasChanges) {
-            setShowDiscardModal(true);
+        if (isEditing) {
+            if (hasChanges) {
+                setShowDiscardModal(true);
+            } else if (isNewEntry) {
+                router.back();
+            } else {
+                exitEditMode();
+            }
         } else {
             router.back();
         }
@@ -285,17 +314,8 @@ export default function EditorScreen() {
             return;
         }
 
-        setContent(originalContent);
-        setTitle(originalTitle);
-        setHasChanges(false);
-        setIsEditing(false);
-        setImageSelection(null);
+        exitEditMode();
     };
-
-    // Single hardware-back handler: discard prompt while editing with unsaved
-    // changes. (A second, duplicate useFocusEffect handler previously lived
-    // here and double-fired this callback.)
-
 
     // Image toolbar actions. The WebView owns the actual node transaction;
     // native mirrors the new values locally so the toolbar updates instantly.
@@ -443,41 +463,67 @@ export default function EditorScreen() {
             {renderHeader()}
 
             <View style={{ flex: 1 }}>
-                {editorHtml !== null && (
-                    <View style={[{ flex: 1 }, !isEditing && { display: 'none' }]}>
-                        <RichEditor
-                            editor={editor}
-                            fontSize={settings.editorFontSize || 15}
-                            lineHeight={Math.round((settings.editorFontSize || 15) * 1.5)}
-                            horizontalPadding={20}
-                            topPadding={32}
-                            placeholder="Start writing..."
-                            expectedDoc={editorHtml ?? undefined}
-                            sessionToken={sessionToken}
-                            onImageSelectionChange={handleImageSelectionChange}
-                            onImageAction={handleImageAction}
-                        />
-                    </View>
-                )}
-
-                {!isEditing && (
-                    <ScrollView
-                        style={{ flex: 1 }}
-                        contentContainerStyle={[styles.scrollContent, { paddingTop: 32 }]}
-                        showsVerticalScrollIndicator={false}
-                    >
-                        <View style={styles.viewContent}>
-                            <MarkdownText
-                                content={content}
-                                paddingHorizontal={20}
-                                style={{
-                                    fontSize: settings.editorFontSize || 15,
-                                    lineHeight: Math.round((settings.editorFontSize || 15) * 1.5)
-                                }}
+                <View style={{ flex: 1 }}>
+                    {editorHtml !== null && (
+                        /* The editor stays laid out at full size while reading. A
+                           WebView that is laid out for the first time on entering
+                           edit mode paints its default surface for a frame, which
+                           showed as a grey band at the bottom of the screen.
+                           The reader layer above is opaque while reading, so this
+                           one only needs to be interactive in edit mode. */
+                        <View
+                            style={[
+                                StyleSheet.absoluteFill,
+                                { backgroundColor: colors.background },
+                            ]}
+                            pointerEvents={isEditing ? 'auto' : 'none'}
+                            importantForAccessibility={isEditing ? 'auto' : 'no-hide-descendants'}
+                        >
+                            <RichEditor
+                                editor={editor}
+                                fontSize={settings.editorFontSize || 15}
+                                lineHeight={Math.round((settings.editorFontSize || 15) * 1.5)}
+                                horizontalPadding={20}
+                                topPadding={32}
+                                placeholder="Start writing..."
+                                expectedDoc={editorHtml ?? undefined}
+                                sessionToken={sessionToken}
+                                onImageSelectionChange={handleImageSelectionChange}
+                                onImageAction={handleImageAction}
                             />
                         </View>
-                    </ScrollView>
-                )}
+                    )}
+
+                    {/* Reader: fades out to reveal the editor and fades back in
+                        when editing ends. It unmounts while editing, so it costs
+                        nothing per keystroke. */}
+                    {!isEditing && (
+                        <Animated.View
+                            entering={FadeIn.duration(250).easing(Easing.bezier(0.05, 0.7, 0.1, 1.0))}
+                            exiting={FadeOut.duration(250).easing(Easing.bezier(0.05, 0.7, 0.1, 1.0))}
+                            style={[StyleSheet.absoluteFill, { backgroundColor: colors.background }]}
+                            pointerEvents={isEditing ? 'none' : 'auto'}
+                            importantForAccessibility={isEditing ? 'no-hide-descendants' : 'auto'}
+                        >
+                            <ScrollView
+                                style={{ flex: 1 }}
+                                contentContainerStyle={[styles.scrollContent, { paddingTop: 32 }]}
+                                showsVerticalScrollIndicator={false}
+                            >
+                                <View style={styles.viewContent}>
+                                    <MarkdownText
+                                        content={content}
+                                        paddingHorizontal={20}
+                                        style={{
+                                            fontSize: settings.editorFontSize || 15,
+                                            lineHeight: Math.round((settings.editorFontSize || 15) * 1.5)
+                                        }}
+                                    />
+                                </View>
+                            </ScrollView>
+                        </Animated.View>
+                    )}
+                </View>
 
                 {isEditing && shownImageSelection && (imageSelection?.active || imageToolsPinned) ? (
                     <ImageToolbar

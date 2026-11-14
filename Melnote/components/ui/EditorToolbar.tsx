@@ -220,6 +220,19 @@ export function EditorToolbar({
 
                 <View style={[styles.toolbarDivider, { backgroundColor: colors.border + '40' }]} />
 
+                {/* Image */}
+                <TouchableOpacity
+                    onPress={() => {
+                        triggerHaptic();
+                        openImageSheet();
+                    }}
+                    style={styles.toolbarButton}
+                    accessibilityRole="button"
+                    accessibilityLabel="Add image"
+                >
+                    <PhotoAlbum size={18} color={colors.text} />
+                </TouchableOpacity>
+
                 {/* Bold */}
                 <TouchableOpacity 
                     onPress={() => handleAction(() => editor?.toggleBold())} 
@@ -303,19 +316,6 @@ export function EditorToolbar({
                 </TouchableOpacity>
 
                 <View style={[styles.toolbarDivider, { backgroundColor: colors.border + '40' }]} />
-
-                {/* Image */}
-                <TouchableOpacity
-                    onPress={() => {
-                        triggerHaptic();
-                        openImageSheet();
-                    }}
-                    style={styles.toolbarButton}
-                    accessibilityRole="button"
-                    accessibilityLabel="Add image"
-                >
-                    <PhotoAlbum size={18} color={colors.text} />
-                </TouchableOpacity>
             </ScrollView>
             <TouchableOpacity 
                 onPress={() => {

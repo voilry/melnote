@@ -1,5 +1,6 @@
 import { View, StyleSheet, ScrollView, Platform, Modal, Pressable, Keyboard, BackHandler, Share, LayoutAnimation } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack, useFocusEffect } from 'expo-router';
+import Animated, { Easing, FadeIn, FadeOut } from 'react-native-reanimated';
 import { ThemedView } from '../../components/ui/ThemedView';
 import { ThemedText } from '../../components/ui/ThemedText';
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
@@ -519,107 +520,132 @@ export default function JournalEditorScreen() {
             />
 
             <View style={{ flex: 1 }}>
-                {/*
-                    PREWARM (mirrors editor.tsx): the editor stays mounted and
-                    hidden while reading, so tapping Edit is instant — no boot
-                    delay, no placeholder flash. sessionToken makes every entry
-                    re-converge body (expectedDoc sync) AND the injected title
-                    header (RichEditor's title re-sync) to current RN state.
-                */}
-                {editorHtml !== null && (
-                    <View
-                        key={String(id)}
-                        style={[{ flex: 1, paddingHorizontal: journalPadding }, !isEditing && { display: 'none' }]}
-                    >
-                        {/* Date + Title are plain header widgets ABOVE the editor body
-                            (injected by RichEditor, scrolling together with it). The title
-                            is an independent contenteditable field — its value streams back
-                            through onTitleChange and can never be structurally deleted. */}
-                        <RichEditor
-                            editor={editor}
-                            fontSize={journalFontSize || 16}
-                            lineHeight={Math.round((journalFontSize || 16) * 1.6)}
-                            horizontalPadding={0}
-                            topPadding={0}
-                            placeholder="Pour your thoughts..."
-                            journalMeta
-                            journalDate={formattedDate}
-                            journalTitle={title}
-                            expectedDoc={editorHtml ?? undefined}
-                            sessionToken={sessionToken}
-                            onMentionQuery={setMentionQuery}
-                            mentionNames={persons.map(p => p.name)}
-                            onTitleChange={(t) => {
-                                setTitle(t);
-                                if (isDataLoadedRef.current) setHasChanges(true);
-                            }}
-                            onTitleFocusChange={setTitleFocused}
-                            journalFocusTitle={id === 'new'}
-                            onImageSelectionChange={handleImageSelectionChange}
-                            onImageAction={handleImageAction}
-                        />
-                    </View>
-                )}
-
-                {!isEditing && (
-                    <ScrollView
-                        ref={scrollViewRef}
-                        style={styles.scrollView}
-                        contentContainerStyle={[
-                            styles.content,
-                            { paddingHorizontal: journalPadding }
-                        ]}
-                        showsVerticalScrollIndicator={false}
-                    >
-                        <ThemedText type="tiny" style={styles.fullDate}>{formattedDate}</ThemedText>
-
-                        {journal.title ? (
-                            <ThemedText type="display" style={styles.viewerTitle}>{journal.title}</ThemedText>
-                        ) : null}
-                        <View style={styles.viewerText}>
-                            {/* paddingHorizontal=0 matches RichEditor's horizontalPadding={0};
-                                the ScrollView's contentContainerStyle provides the outer padding. */}
-                            <MarkdownText
-                                content={content}
-                                paddingHorizontal={0}
+                <View style={{ flex: 1 }}>
+                    {/*
+                        PREWARM (mirrors editor.tsx): the editor stays mounted and
+                        laid out at full size while reading, so tapping Edit is
+                        instant — no boot delay, no placeholder flash, and no
+                        first-layout surface paint (the old grey band). The reader
+                        layer above is opaque while reading, so this one only needs
+                        to be interactive in edit mode.
+                        sessionToken makes every entry re-converge body
+                        (expectedDoc sync) AND the injected title header
+                        (RichEditor's title re-sync) to current RN state.
+                    */}
+                    {editorHtml !== null && (
+                        <View
+                            key={String(id)}
+                            style={[
+                                StyleSheet.absoluteFill,
+                                {
+                                    paddingHorizontal: journalPadding,
+                                    backgroundColor: colors.background,
+                                },
+                            ]}
+                            pointerEvents={isEditing ? 'auto' : 'none'}
+                            importantForAccessibility={isEditing ? 'auto' : 'no-hide-descendants'}
+                        >
+                            {/* Date + Title are plain header widgets ABOVE the editor body
+                                (injected by RichEditor, scrolling together with it). The title
+                                is an independent contenteditable field — its value streams back
+                                through onTitleChange and can never be structurally deleted. */}
+                            <RichEditor
+                                editor={editor}
+                                fontSize={journalFontSize || 16}
+                                lineHeight={Math.round((journalFontSize || 16) * 1.6)}
+                                horizontalPadding={0}
+                                topPadding={0}
+                                placeholder="Pour your thoughts..."
+                                journalMeta
+                                journalDate={formattedDate}
+                                journalTitle={title}
+                                expectedDoc={editorHtml ?? undefined}
+                                sessionToken={sessionToken}
+                                onMentionQuery={setMentionQuery}
                                 mentionNames={persons.map(p => p.name)}
-                                style={{
-                                    fontSize: journalFontSize || 16,
-                                    lineHeight: Math.round((journalFontSize || 16) * 1.6)
+                                onTitleChange={(t) => {
+                                    setTitle(t);
+                                    if (isDataLoadedRef.current) setHasChanges(true);
                                 }}
+                                onTitleFocusChange={setTitleFocused}
+                                journalFocusTitle={id === 'new'}
+                                onImageSelectionChange={handleImageSelectionChange}
+                                onImageAction={handleImageAction}
                             />
                         </View>
+                    )}
 
-                        {/* Tagged People Section */}
-                        <View style={styles.tagsContainer}>
-                            <View style={styles.sectionHeader}>
-                                <UserPlus size={16} color={colors.secondary} weight="fill" />
-                                <ThemedText type="sectionHeader" style={styles.sectionTitle}>Connections Mentioned</ThemedText>
-                            </View>
+                    {/* Reader: fades out to reveal the editor and fades back in
+                        when editing ends. It unmounts while editing, so it costs
+                        nothing per keystroke. */}
+                    {!isEditing && (
+                        <Animated.View
+                            entering={FadeIn.duration(250).easing(Easing.bezier(0.05, 0.7, 0.1, 1.0))}
+                            exiting={FadeOut.duration(250).easing(Easing.bezier(0.05, 0.7, 0.1, 1.0))}
+                            style={[StyleSheet.absoluteFill, { backgroundColor: colors.background }]}
+                            pointerEvents={isEditing ? 'none' : 'auto'}
+                            importantForAccessibility={isEditing ? 'no-hide-descendants' : 'auto'}
+                        >
+                            <ScrollView
+                                ref={scrollViewRef}
+                                style={styles.scrollView}
+                                contentContainerStyle={[
+                                    styles.content,
+                                    { paddingHorizontal: journalPadding }
+                                ]}
+                                showsVerticalScrollIndicator={false}
+                            >
+                                <ThemedText type="tiny" style={styles.fullDate}>{formattedDate}</ThemedText>
 
-                            <View style={styles.tagsFlexGrid}>
-                                {taggedPeople.length > 0 ? (
-                                    taggedPeople.map((t: any) => (
-                                        <ScalePressable
-                                            key={t.person.id}
-                                            onPress={() => router.push({ pathname: '/person/[id]', params: { id: t.person.id } })}
-                                            style={[styles.personTag, { backgroundColor: colors.surface, marginBottom: 12 }]}
-                                            innerStyle={{ borderRadius: 14 }}
-                                        >
-                                            <Avatar name={t.person.name} uri={t.person.avatarUri} size={30} />
-                                            <ThemedText style={styles.tagName}>{t.person.name}</ThemedText>
-                                        </ScalePressable>
-                                    ))
-                                ) : (
-                                    <View style={styles.emptyTagsContainer}>
-                                        <ThemedText type="small" style={{ color: colors.secondary, textAlign: 'center', opacity: 0.6 }}>No connections mentioned</ThemedText>
-                                        <ThemedText type="tiny" style={{ color: colors.secondary, textAlign: 'center', opacity: 0.4, marginTop: 4 }}>use @ to mention</ThemedText>
+                                {journal.title ? (
+                                    <ThemedText type="display" style={styles.viewerTitle}>{journal.title}</ThemedText>
+                                ) : null}
+                                <View style={styles.viewerText}>
+                                    {/* paddingHorizontal=0 matches RichEditor's horizontalPadding={0};
+                                        the ScrollView's contentContainerStyle provides the outer padding. */}
+                                    <MarkdownText
+                                        content={content}
+                                        paddingHorizontal={0}
+                                        mentionNames={persons.map(p => p.name)}
+                                        style={{
+                                            fontSize: journalFontSize || 16,
+                                            lineHeight: Math.round((journalFontSize || 16) * 1.6)
+                                        }}
+                                    />
+                                </View>
+
+                                {/* Tagged People Section */}
+                                <View style={styles.tagsContainer}>
+                                    <View style={styles.sectionHeader}>
+                                        <UserPlus size={16} color={colors.secondary} weight="fill" />
+                                        <ThemedText type="sectionHeader" style={styles.sectionTitle}>Connections Mentioned</ThemedText>
                                     </View>
-                                )}
-                            </View>
-                        </View>
-                    </ScrollView>
-                )}
+
+                                    <View style={styles.tagsFlexGrid}>
+                                        {taggedPeople.length > 0 ? (
+                                            taggedPeople.map((t: any) => (
+                                                <ScalePressable
+                                                    key={t.person.id}
+                                                    onPress={() => router.push({ pathname: '/person/[id]', params: { id: t.person.id } })}
+                                                    style={[styles.personTag, { backgroundColor: colors.surface, marginBottom: 12 }]}
+                                                    innerStyle={{ borderRadius: 14 }}
+                                                >
+                                                    <Avatar name={t.person.name} uri={t.person.avatarUri} size={30} />
+                                                    <ThemedText style={styles.tagName}>{t.person.name}</ThemedText>
+                                                </ScalePressable>
+                                            ))
+                                        ) : (
+                                            <View style={styles.emptyTagsContainer}>
+                                                <ThemedText type="small" style={{ color: colors.secondary, textAlign: 'center', opacity: 0.6 }}>No connections mentioned</ThemedText>
+                                                <ThemedText type="tiny" style={{ color: colors.secondary, textAlign: 'center', opacity: 0.4, marginTop: 4 }}>use @ to mention</ThemedText>
+                                            </View>
+                                        )}
+                                    </View>
+                                </View>
+                            </ScrollView>
+                        </Animated.View>
+                    )}
+                </View>
 
                 {isEditing && isKeyboardVisible && !titleFocused && mentionQuery !== null && (
                     <MentionSuggestionBar
