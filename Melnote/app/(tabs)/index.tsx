@@ -39,6 +39,7 @@ import { DashboardGroupCard } from '../../components/person/DashboardGroupCard';
 import { ManageGroupMembersModal } from '../../components/person/ManageGroupMembersModal';
 import { EntryRepository } from '../../db/repositories/EntryRepository';
 import { markdownPreviewText } from '../../utils/markdownConverter';
+import { persistAvatar, deleteAvatarFile } from '../../utils/avatar';
 import { useSettings } from '../../store/SettingsContext';
 import { AddReminderModal } from '../../components/calendar/AddReminderModal';
 import { DeleteModal } from '../../components/ui/DeleteModal';
@@ -551,7 +552,10 @@ export default function PeopleScreen() {
         });
 
         if (!result.canceled) {
-            setNewAvatarUri(result.assets[0].uri);
+            // The picker returns a temporary cache file - store a copy the
+            // app owns so the avatar cannot be purged out from under us.
+            const persisted = await persistAvatar(result.assets[0].uri);
+            setNewAvatarUri(persisted);
         }
     };
 
@@ -593,6 +597,13 @@ export default function PeopleScreen() {
         setNewBirthdate('');
         setNewFirstMet('');
         setNewAvatarUri(null);
+    };
+
+    const closeAddModal = () => {
+        // An avatar that was picked but never saved is ours to remove.
+        if (newAvatarUri) void deleteAvatarFile(newAvatarUri);
+        setNewAvatarUri(null);
+        setShowAddModal(false);
     };
 
     const [sortBy, setSortBy] = useState<'name' | 'newest' | 'oldest'>(settings.defaultSort);
@@ -946,13 +957,13 @@ export default function PeopleScreen() {
                 transparent={false}
                 presentationStyle="fullScreen"
                 statusBarTranslucent={true}
-                onRequestClose={() => setShowAddModal(false)}
+                onRequestClose={closeAddModal}
             >
                 <View style={[styles.fullScreenPage, { backgroundColor: colors.background }]}>
                     <StatusBar style="auto" />
                     <View style={[styles.fullScreenHeader, { paddingTop: insets.top + 8, paddingBottom: 12 }]}>
                         <ScalePressable
-                            onPress={() => setShowAddModal(false)}
+                            onPress={closeAddModal}
                             style={styles.modalHeaderAction}
                             hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
                             overlayColor="transparent"

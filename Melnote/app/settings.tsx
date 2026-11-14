@@ -12,6 +12,14 @@ import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import * as Haptics from 'expo-haptics';
 import { DataRepository } from '../db/repositories/DataRepository';
+import {
+    closeBackup,
+    createBackup,
+    openBackup,
+    restoreBackup,
+    type BackupSession,
+    type BackupSummary,
+} from '../utils/backup';
 import { EntryRepository } from '../db/repositories/EntryRepository';
 import { PersonRepository } from '../db/repositories/PersonRepository';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -29,13 +37,13 @@ import { ScalePressable } from '../components/ui/ScalePressable';
 import { APP_VERSION } from '../constants/Version';
 
 export default function SettingsScreen() {
-    const { settings, updateSetting, resetSettings, refreshApp } = useSettings();
+    const { settings, updateSetting, resetSettings, refreshApp, reloadSettings } = useSettings();
     const { colors, theme, hapticsEnabled } = useAppTheme();
     const router = useRouter();
     const insets = useSafeAreaInsets();
     const [showClearData, setShowClearData] = useState(false);
     const [showResetSettings, setShowResetSettings] = useState(false);
-    const [importedDataToRestore, setImportedDataToRestore] = useState<any>(null);
+    const [importedDataToRestore, setImportedDataToRestore] = useState<BackupSession | null>(null);
     const [alertConfig, setAlertConfig] = useState<{ visible: boolean, title: string, description: string, type: 'success' | 'error' | 'info' | 'warning', onClose?: () => void } | null>(null);
 
 
@@ -57,22 +65,18 @@ export default function SettingsScreen() {
     const handleExportData = async () => {
         try {
             triggerHaptic(Haptics.ImpactFeedbackStyle.Medium);
-            const allData = await DataRepository.exportAllData();
-            const jsonString = JSON.stringify(allData, null, 2);
-            const fileName = `backup_${new Date().toISOString().split('T')[0]}.melnote`;
 
             if (Platform.OS === 'web') {
-                const blob = new Blob([jsonString], { type: 'application/json' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = fileName;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
+                showAlert(
+                    "Not available here",
+                    "Backup export is available on Android and iOS.",
+                    "info"
+                );
                 return;
             }
+
+            const backup = await createBackup();
+            const summary = backupSummaryText(backup);
 
             if (Platform.OS === 'android') {
                 const SAF = (FileSystem as any).StorageAccessFramework;
@@ -93,11 +97,24 @@ export default function SettingsScreen() {
                     try {
                         const uri = await SAF.createFileAsync(
                             permissions.directoryUri,
-                            fileName,
-                            'application/octet-stream'
+                            backup.fileName,
+                            'application/zip'
                         );
-                        await FileSystem.writeAsStringAsync(uri, jsonString, { encoding: 'utf8' });
-                        showAlert("Success", "Melnote backup saved to your selected folder.", "success");
+                        // The archive is binary, so it travels as base64 into the
+                        // document the user picked.
+                        const base64 = await FileSystem.readAsStringAsync(backup.uri, {
+                            encoding: FileSystem.EncodingType.Base64,
+                        });
+                        await FileSystem.writeAsStringAsync(uri, base64, {
+                            encoding: FileSystem.EncodingType.Base64,
+                        });
+                        // The archive now lives in the folder the user picked.
+                        await FileSystem.deleteAsync(backup.uri, { idempotent: true }).catch(() => { });
+                        showAlert(
+                            "Backup saved",
+                            `${summary}${formatSize(backup.size) ? ` • ${formatSize(backup.size)}` : ''}\n\n${backup.missingMedia.length ? `${backup.missingMedia.length} image(s) referenced by a note were missing and are not in this backup.` : 'All images are included.'}`,
+                            backup.missingMedia.length ? 'warning' : 'success'
+                        );
                         return;
                     } catch (safErr: any) {
                         console.warn('SAF folder write error:', safErr);
@@ -120,17 +137,17 @@ export default function SettingsScreen() {
                 }
             }
 
-            // iOS Implementation (Save to Files via Share Sheet)
-            const cacheDir = (FileSystem as any).cacheDirectory || (FileSystem as any).documentDirectory;
-            const fileUri = `${cacheDir}${fileName}`;
-            await FileSystem.writeAsStringAsync(fileUri, jsonString, { encoding: 'utf8' });
-
             if (await Sharing.isAvailableAsync()) {
-                await Sharing.shareAsync(fileUri, {
-                    mimeType: 'application/octet-stream',
+                await Sharing.shareAsync(backup.uri, {
+                    mimeType: 'application/zip',
                     dialogTitle: 'Save Melnote Backup',
-                    UTI: 'public.data'
+                    UTI: 'public.zip-archive'
                 });
+                showAlert(
+                    "Backup ready",
+                    `${summary}${formatSize(backup.size) ? ` • ${formatSize(backup.size)}` : ''}\n\n${backup.missingMedia.length ? `${backup.missingMedia.length} image(s) referenced by a note were missing and are not in this backup.` : 'All images are included.'}`,
+                    backup.missingMedia.length ? 'warning' : 'success'
+                );
             } else {
                 showAlert("Export Error", "Sharing is not available on this device.", "error");
             }
@@ -149,23 +166,22 @@ export default function SettingsScreen() {
 
             if (result.canceled) return;
 
-            const fileUri = result.assets[0].uri;
-            const content = await FileSystem.readAsStringAsync(fileUri);
-            const importedData = JSON.parse(content);
-
+            const session = await openBackup(result.assets[0].uri);
             triggerHaptic(Haptics.ImpactFeedbackStyle.Heavy);
-            setImportedDataToRestore(importedData);
-        } catch (error) {
-            showAlert("Import Failed", "Could not read the backup file.", "error");
+            setImportedDataToRestore(session);
+        } catch (error: any) {
+            showAlert("Import Failed", error?.message || "Could not read the backup file.", "error");
         }
     };
 
     const confirmRestoreBackup = async () => {
-        if (!importedDataToRestore) return;
+        const session = importedDataToRestore;
+        if (!session) return;
         try {
-            await DataRepository.importData(importedDataToRestore);
+            const summary = await restoreBackup(session);
+            await reloadSettings();
             triggerHaptic(Haptics.ImpactFeedbackStyle.Medium);
-            showAlert("Success", "Your network has been restored.", "success", () => {
+            showAlert("Success", `Your data has been restored.\n\n${backupSummaryText(summary)}`, "success", () => {
                 router.dismissAll();
                 setTimeout(() => refreshApp(), 350);
             });
@@ -508,8 +524,15 @@ export default function SettingsScreen() {
             <DeleteModal
                 visible={!!importedDataToRestore}
                 title="Restore Data"
-                description="This will replace all your current contacts and notes with the data from the backup file. This cannot be undone."
-                onCancel={() => setImportedDataToRestore(null)}
+                description={
+                    importedDataToRestore
+                        ? `${backupSummaryText(importedDataToRestore.summary)}\n\nThis will replace all your current contacts, notes and images with the data from the backup file. This cannot be undone.`
+                        : ''
+                }
+                onCancel={() => {
+                    void closeBackup(importedDataToRestore);
+                    setImportedDataToRestore(null);
+                }}
                 onDelete={confirmRestoreBackup}
                 actionLabel="Restore"
                 actionColor={colors.tint}
@@ -677,6 +700,30 @@ function ThemeCard({ label, active, onPress, icon: Icon, colors, theme }: any) {
             </ThemedText>
         </ScalePressable>
     );
+}
+
+/** One-line description of what a backup holds, used in alerts and the confirm sheet. */
+function backupSummaryText(summary: BackupSummary): string {
+    const parts: string[] = [];
+    if (summary.createdAt) {
+        const date = new Date(summary.createdAt);
+        const stamp = isNaN(date.getTime())
+            ? summary.createdAt
+            : date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+        parts.push(`Backup from ${stamp}`);
+    }
+    parts.push(`${summary.peopleCount} people`);
+    parts.push(`${summary.journalCount} journals`);
+    if (summary.entryCount) parts.push(`${summary.entryCount} notes`);
+    if (summary.mediaCount) parts.push(`${summary.mediaCount} images`);
+    return parts.join(' • ');
+}
+
+/** Human readable file size for the export summary. */
+function formatSize(bytes: number): string {
+    if (!bytes) return '';
+    if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 const styles = StyleSheet.create({

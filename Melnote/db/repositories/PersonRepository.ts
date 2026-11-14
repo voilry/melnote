@@ -3,6 +3,7 @@ import { people, entries, journals, journalTags, reminders, relationships, perso
 import { eq, desc, isNotNull, asc, sql, or } from 'drizzle-orm';
 import { InferSelectModel, InferInsertModel } from 'drizzle-orm';
 import * as Notifications from 'expo-notifications';
+import { deleteAvatarFile } from '../../utils/avatar';
 
 export type Person = InferSelectModel<typeof people>;
 export type NewPerson = InferInsertModel<typeof people>;
@@ -35,6 +36,13 @@ export class PersonRepository {
     }
 
     static async update(id: number, data: Partial<NewPerson>) {
+        // The avatar file the app owns is replaced, so the old one goes with it.
+        if (data.avatarUri !== undefined) {
+            const previous = await this.getById(id);
+            if (previous?.avatarUri && previous.avatarUri !== data.avatarUri) {
+                await deleteAvatarFile(previous.avatarUri);
+            }
+        }
         const result = await db.update(people).set({ 
             ...data,
             updatedAt: new Date()
@@ -43,6 +51,9 @@ export class PersonRepository {
     }
 
     static async delete(id: number) {
+        // The avatar the app owns belongs to this person only.
+        const person = await this.getById(id);
+
         // Query reminders first to cancel scheduled OS notifications
         try {
             const personReminders = await db.select().from(reminders).where(eq(reminders.personId, id));
@@ -66,6 +77,7 @@ export class PersonRepository {
         await db.delete(reminders).where(eq(reminders.personId, id));
         await db.delete(relationships).where(or(eq(relationships.sourcePersonId, id), eq(relationships.targetPersonId, id)));
         await db.delete(people).where(eq(people.id, id));
+        await deleteAvatarFile(person?.avatarUri);
     }
 
     static async getUpcomingBirthdays(limit = 3) {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, TouchableOpacity, Modal, Platform } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import * as Haptics from 'expo-haptics';
@@ -12,6 +12,7 @@ import { DatePicker } from '../ui/DatePicker';
 import { X, PhotoAlbum, Check } from '@/components/ui/Icon';
 import * as ImagePicker from 'expo-image-picker';
 import { Person } from '../../db/repositories/PersonRepository';
+import { persistAvatar, deleteAvatarFile } from '../../utils/avatar';
 import { useAppTheme } from '../../hooks/useAppTheme';
 import { useSettings } from '../../store/SettingsContext';
 import Animated, { FadeInDown, ZoomIn } from 'react-native-reanimated';
@@ -34,6 +35,7 @@ export function EditPersonModal({ visible, onClose, onSave, person }: EditPerson
     const [birthdate, setBirthdate] = useState(person.birthdate || '');
     const [firstMet, setFirstMet] = useState(person.firstMet || '');
     const [avatarUri, setAvatarUri] = useState(person.avatarUri || null);
+    const savedAvatarRef = useRef<string | null>(person.avatarUri || null);
 
     useEffect(() => {
         if (visible) {
@@ -43,11 +45,13 @@ export function EditPersonModal({ visible, onClose, onSave, person }: EditPerson
             setBirthdate(person.birthdate || '');
             setFirstMet(person.firstMet || '');
             setAvatarUri(person.avatarUri || null);
+            savedAvatarRef.current = person.avatarUri || null;
         }
     }, [visible, person]);
 
     const handleSave = () => {
         if (hapticsEnabled && Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        savedAvatarRef.current = avatarUri;
         onSave({
             name,
             elevatorPitch: pitch,
@@ -59,6 +63,10 @@ export function EditPersonModal({ visible, onClose, onSave, person }: EditPerson
     };
 
     const handleClose = () => {
+        // A freshly picked avatar that was never saved is ours to remove.
+        if (avatarUri && avatarUri !== savedAvatarRef.current) {
+            void deleteAvatarFile(avatarUri);
+        }
         if (hapticsEnabled && Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         onClose();
     };
@@ -73,7 +81,10 @@ export function EditPersonModal({ visible, onClose, onSave, person }: EditPerson
         });
 
         if (!result.canceled) {
-            setAvatarUri(result.assets[0].uri);
+            // The picker returns a temporary cache file - store a copy the
+            // app owns so the avatar cannot be purged out from under us.
+            const persisted = await persistAvatar(result.assets[0].uri);
+            setAvatarUri(persisted);
         }
     };
 

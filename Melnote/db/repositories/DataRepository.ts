@@ -3,6 +3,7 @@ import { people, entries, journals, journalTags, entryTypes, relationships, grou
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Notifications from 'expo-notifications';
 import { ReminderRepository } from './ReminderRepository';
+import { SettingsRepository } from './SettingsRepository';
 import { eq } from 'drizzle-orm';
 
 export const DataRepository = {
@@ -24,7 +25,10 @@ export const DataRepository = {
         await db.delete(entryTypes);
     },
 
-    async exportAllData(): Promise<any> {
+    async exportAllData(options: { embedAvatars?: boolean } = {}): Promise<any> {
+        // The zip container ships avatars as files, so the base64 embedding is
+        // only needed for the legacy single-file JSON export.
+        const embedAvatars = options.embedAvatars !== false;
         const [p, e, r, j, jt, et, g, pg, rem, c] = await Promise.all([
             db.select().from(people),
             db.select().from(entries),
@@ -40,7 +44,7 @@ export const DataRepository = {
 
         // Process avatars sequentially to avoid memory bloat during Base64 encoding
         const peopleWithImages: any[] = [];
-        for (const person of p) {
+        for (const person of embedAvatars ? p : []) {
             if (person.avatarUri && person.avatarUri.startsWith('file://')) {
                 try {
                     const base64 = await FileSystem.readAsStringAsync(person.avatarUri, { encoding: FileSystem.EncodingType.Base64 });
@@ -52,9 +56,12 @@ export const DataRepository = {
             }
             peopleWithImages.push(person);
         }
+        if (!embedAvatars) {
+            for (const person of p) peopleWithImages.push({ ...person });
+        }
 
         return {
-            version: "0.1 alpha",
+            version: "0.2 alpha",
             exportedAt: new Date().toISOString(),
             data: {
                 people: peopleWithImages,
@@ -66,7 +73,8 @@ export const DataRepository = {
                 groups: g,
                 personGroups: pg,
                 reminders: rem,
-                contacts: c
+                contacts: c,
+                settings: await SettingsRepository.getAll()
             }
         };
     },

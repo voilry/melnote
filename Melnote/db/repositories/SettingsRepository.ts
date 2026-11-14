@@ -19,5 +19,16 @@ export const SettingsRepository = {
             acc[row.key] = row.value;
             return acc;
         }, {});
+    },
+
+    /** Replaces the whole settings table, used when a backup is restored. */
+    async replaceAll(entries: Record<string, string>): Promise<void> {
+        await expoDb.runSync(`DELETE FROM settings`);
+        for (const [key, value] of Object.entries(entries ?? {})) {
+            await expoDb.runSync(
+                `INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)`,
+                [key, String(value)]
+            );
+        }
     }
 };

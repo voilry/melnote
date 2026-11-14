@@ -39,6 +39,8 @@ interface SettingsContextType {
     triggerSecurityEvent: () => void;
     refreshKey: number;
     refreshApp: () => void;
+    /** Re-reads the persisted settings, used after a backup restore. */
+    reloadSettings: () => Promise<void>;
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -80,6 +82,10 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
 
     const refreshApp = () => {
         setRefreshKey(prev => prev + 1);
+    };
+
+    const reloadSettings = async () => {
+        await loadSettings();
     };
 
     useEffect(() => {
@@ -180,7 +186,8 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
             lastSecurityEvent, 
             triggerSecurityEvent,
             refreshKey,
-            refreshApp
+            refreshApp,
+            reloadSettings
         }}>
             {children}
         </SettingsContext.Provider>
