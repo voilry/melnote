@@ -114,7 +114,13 @@ export default function SettingsScreen() {
                     } catch (folderError: any) {
                         console.warn('Folder write error:', folderError);
                         const msg = String(folderError?.message || '');
-                        if (msg.includes('writable') || msg.includes('msd') || msg.includes('downloads')) {
+                        if (isOutOfSpace(msg)) {
+                            showAlert(
+                                "Not Enough Space",
+                                "There is not enough free space to save the backup. Free up some storage and try again.",
+                                "error"
+                            );
+                        } else if (msg.includes('writable') || msg.includes('msd') || msg.includes('downloads')) {
                             showAlert(
                                 "Folder Restricted",
                                 "Android prevents saving directly into the root Downloads folder. Please select the 'Documents' folder or create a new subfolder.",
@@ -181,6 +187,14 @@ export default function SettingsScreen() {
             triggerHaptic(Haptics.ImpactFeedbackStyle.Heavy);
             setImportedDataToRestore(session);
         } catch (error: any) {
+            if (isOutOfSpace(String(error?.message || ''))) {
+                showAlert(
+                    "Not Enough Space",
+                    "There is not enough free space to read the backup. Free up some storage and try again.",
+                    "error"
+                );
+                return;
+            }
             showAlert("Import Failed", error?.message || "Could not read the backup file.", "error");
         } finally {
             importingRef.current = false;
@@ -201,7 +215,15 @@ export default function SettingsScreen() {
             });
         } catch (e: any) {
             console.error('Full import error:', e);
-            showAlert("Import Error", `Failed to restore: ${e.message || "Unknown error"}`, "error");
+            if (isOutOfSpace(String(e?.message || ''))) {
+                showAlert(
+                    "Not Enough Space",
+                    "There is not enough free space to restore the backup. Your current data is unchanged - free up some storage and try again.",
+                    "error"
+                );
+            } else {
+                showAlert("Import Error", `Failed to restore: ${e.message || "Unknown error"}`, "error");
+            }
         } finally {
             setImportedDataToRestore(null);
         }
@@ -740,6 +762,15 @@ function formatSize(bytes: number): string {
     if (!bytes) return '';
     if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/** True when a native error means the device ran out of storage. */
+function isOutOfSpace(message: string): boolean {
+    const msg = message.toLowerCase();
+    return msg.includes('enospc')
+        || msg.includes('no space left')
+        || msg.includes('not enough space')
+        || msg.includes('disk full');
 }
 
 const styles = StyleSheet.create({

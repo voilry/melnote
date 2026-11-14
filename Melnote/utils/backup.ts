@@ -294,6 +294,23 @@ export async function createBackup(): Promise<CreatedBackup> {
 }
 
 /**
+ * True when the file starts with the zip magic bytes.
+ *
+ * Melnote backups are zip containers, so a file that begins with "PK" is
+ * definitely one. That lets a failed extraction report its real reason (no
+ * space left, damaged archive) instead of "this is not a valid Melnote
+ * backup".
+ */
+async function looksLikeZip(path: string): Promise<boolean> {
+    try {
+        const head = await FileSystem.readAsStringAsync(path, { position: 0, length: 2 });
+        return head.startsWith('PK');
+    } catch {
+        return false;
+    }
+}
+
+/**
  * Opens a backup file without touching the database, so the UI can show what
  * is inside before the user commits to a restore.
  */
@@ -303,13 +320,15 @@ export async function openBackup(fileUri: string): Promise<BackupSession> {
     const { path: source, tempFile } = await localizeBackup(fileUri);
 
     let extracted = false;
+    let unzipError: any = null;
     try {
         const zipper = getZipArchive();
         if (!zipper) throw new Error('Backup needs a newer build of Melnote. Update the app and try again.');
         await ensureDirectory(dir);
         await zipper.unzip(stripScheme(source), stripScheme(dir));
         extracted = true;
-    } catch {
+    } catch (error) {
+        unzipError = error;
         extracted = false;
     }
 
@@ -356,6 +375,14 @@ export async function openBackup(fileUri: string): Promise<BackupSession> {
     }
 
     await removeDirectory(dir);
+
+    // The file is a zip but extracting it failed, so the real reason (no
+    // space left, damaged archive, unreadable file) is worth reporting
+    // instead of pretending it is an old JSON backup.
+    if (unzipError && await looksLikeZip(source)) {
+        if (tempFile) await FileSystem.deleteAsync(tempFile, { idempotent: true }).catch(() => { });
+        throw new Error(unzipError?.message || 'Could not read this backup file.');
+    }
 
     // Not a zip container - fall back to the legacy JSON export format.
     try {
