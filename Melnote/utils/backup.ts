@@ -45,7 +45,7 @@ function getZipArchive(): ZipArchiveModule | null {
 
 export const BACKUP_FORMAT = 'melnote-backup';
 export const BACKUP_VERSION = 2;
-export const BACKUP_EXTENSION = '.melnote';
+export const BACKUP_EXTENSION = '.mel';
 
 const MEDIA_REF_PATTERN = /media\/[A-Za-z0-9_.-]+\.(?:jpg|jpeg|png|webp|gif)/gi;
 
@@ -123,7 +123,7 @@ function fileNameOf(uri: string): string {
 async function localizeBackup(fileUri: string): Promise<{ path: string; tempFile?: string }> {
     if (!fileUri || fileUri.startsWith('file://')) return { path: fileUri };
 
-    const local = `${cacheRoot()}melnote-picked-${Date.now()}.melnote`;
+    const local = `${cacheRoot()}melnote-picked-${Date.now()}.mel`;
     try {
         const base64 = await FileSystem.readAsStringAsync(fileUri, {
             encoding: FileSystem.EncodingType.Base64,
@@ -175,8 +175,9 @@ export async function createBackup(): Promise<CreatedBackup> {
         throw new Error('Backup needs a newer build of Melnote. Update the app and try again.');
     }
 
-    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const fileName = `melnote-backup-${stamp.slice(0, 19)}${BACKUP_EXTENSION}`;
+    const now = new Date();
+    const stamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const fileName = `backup-${stamp}${BACKUP_EXTENSION}`;
     const root = cacheRoot();
     const staging = `${root}melnote-staging-${Date.now()}/`;
     const archivePath = `${root}${fileName}`;
