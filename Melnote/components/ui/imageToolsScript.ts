@@ -25,6 +25,8 @@ export const IMAGE_TOOLS_JS = `
   var resizeState = null;
   var pressCandidate = null;
   var menuVisible = false;
+  var menuScale = 1;
+  var menuAnim = null;
 
   function getEditor() {
     var pm = document.querySelector('.ProseMirror');
@@ -103,15 +105,13 @@ export const IMAGE_TOOLS_JS = `
       '.melnote-corner-line { width:16px; height:16px; border-right:3.5px solid var(--melnote-tint, #B45309); border-bottom:3.5px solid var(--melnote-tint, #B45309); border-bottom-right-radius:8px; margin-right:3px; margin-bottom:3px; box-sizing:border-box; filter:drop-shadow(0 1px 3px rgba(0,0,0,0.45)); transition:transform 0.1s ease; }',
       '.melnote-corner-handle:active .melnote-corner-line { transform:scale(1.2); }',
       '.melnote-resize-badge { position:absolute; transform:translate(-50%, -50%); background:rgba(20,20,22,0.92); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); color:#ffffff; font:600 13px/18px -apple-system, Roboto, sans-serif; padding:4px 12px; border-radius:14px; box-shadow:0 4px 14px rgba(0,0,0,0.35); pointer-events:none; z-index:2147483647; display:none; }',
-      '.melnote-floating-toolbar { position:absolute; display:flex; align-items:center; gap:2px; padding:4px 6px; background:rgba(28,28,30,0.95); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); border-radius:22px; box-shadow:0 8px 24px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.12); pointer-events:auto; touch-action:manipulation; user-select:none; -webkit-user-select:none; white-space:nowrap; z-index:2147483647; transform:translateZ(0); }',
-      '@keyframes melnote-toolbar-in { from { opacity:0; transform:scale(0.9) translateZ(0); } to { opacity:1; transform:scale(1) translateZ(0); } }',
-      '.melnote-toolbar-enter { animation:melnote-toolbar-in 0.22s cubic-bezier(0.34, 1.56, 0.64, 1); }',
-      '.melnote-btn { display:inline-flex; align-items:center; justify-content:center; width:34px; height:34px; border-radius:10px; background:transparent; border:none; padding:0; margin:0; color:rgba(255,255,255,0.92); cursor:pointer; outline:none; -webkit-tap-highlight-color:transparent; transition:background-color 0.15s ease, transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1); }',
+      '.melnote-floating-toolbar { position:absolute; display:flex; align-items:center; gap:2px; padding:4px 5px; background:rgba(28,28,30,0.95); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); border-radius:22px; box-shadow:0 8px 24px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.12); pointer-events:auto; touch-action:manipulation; user-select:none; -webkit-user-select:none; white-space:nowrap; z-index:2147483647; transform-origin:50% 50%; }',
+      '.melnote-btn { display:inline-flex; align-items:center; justify-content:center; width:33px; height:33px; border-radius:10px; background:transparent; border:none; padding:0; margin:0; color:rgba(255,255,255,0.92); cursor:pointer; outline:none; -webkit-tap-highlight-color:transparent; transition:background-color 0.15s ease, transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1); }',
       '.melnote-btn:active, .melnote-btn.melnote-pressed { background:rgba(255,255,255,0.18); transform:scale(0.9); }',
       '.melnote-btn.active { background:rgba(180,83,9,0.25); color:var(--melnote-tint, #B45309); }',
       '.melnote-btn.delete { color:#ff453a; }',
       '.melnote-btn.done { color:#30d158; }',
-      '.melnote-sep { width:1px; height:18px; background:rgba(255,255,255,0.16); margin:0 3px; }',
+      '.melnote-sep { width:1px; height:17px; background:rgba(255,255,255,0.16); margin:0 2px; }',
       '.melnote-editor-caption { position:absolute; pointer-events:none !important; box-sizing:border-box; font:italic 13px/18px -apple-system, BlinkMacSystemFont, Figtree, Roboto, sans-serif; padding:2px 4px; white-space:normal; overflow-wrap:break-word; word-break:break-word; user-select:none; -webkit-user-select:none; color:var(--melnote-secondary, #8e8e93); z-index:2147483641; }'
     ].join('\\n');
     document.head.appendChild(style);
@@ -291,6 +291,7 @@ export const IMAGE_TOOLS_JS = `
         buildSVG('<polyline points="20 6 9 17 4 12"/>', true, 2.5) +
       '</button>'
     ].join('');
+    floatingMenu.style.transform = 'scale(1) translateZ(0)';
 
     // Android WebView suppresses the synthetic click event that follows a
     // preventDefault()-ed pointerdown, so actions fire on pointerup instead.
@@ -361,6 +362,30 @@ export const IMAGE_TOOLS_JS = `
     document.body.appendChild(indicator);
   }
 
+  /**
+   * Springy pop-in used whenever the menu attaches to an image. The WAAPI
+   * animation runs on top of the inline fit-to-image scale, so a narrow image
+   * (smaller scale) still gets the same overshoot instead of snapping.
+   */
+  function playMenuEnter() {
+    var end = 'scale(' + menuScale + ') translateZ(0)';
+    floatingMenu.style.transform = end;
+    if (!floatingMenu || typeof floatingMenu.animate !== 'function') return;
+    if (menuAnim) {
+      try { menuAnim.cancel(); } catch (e) { }
+      menuAnim = null;
+    }
+    try {
+      menuAnim = floatingMenu.animate(
+        [
+          { opacity: 0, transform: 'scale(' + (menuScale * 0.9) + ') translateZ(0)' },
+          { opacity: 1, transform: end }
+        ],
+        { duration: 220, easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)' }
+      );
+    } catch (e) { menuAnim = null; }
+  }
+
   function positionOverlay() {
     if (selectedPos == null) return;
     var ed = getEditor();
@@ -388,12 +413,22 @@ export const IMAGE_TOOLS_JS = `
       menuVisible = false;
     } else {
       floatingMenu.style.display = 'flex';
+
+      var menuW = floatingMenu.offsetWidth || 302;
+      var menuH = floatingMenu.offsetHeight || 42;
+
+      // Fit the pill to the image: narrow images get a compact menu, bounded
+      // below so the buttons stay tappable. Full-width images sit at 1.
+      var nextScale = Math.max(0.8, Math.min(1, width / menuW));
+      if (Math.abs(nextScale - menuScale) > 0.001) {
+        menuScale = nextScale;
+        floatingMenu.style.transform = 'scale(' + menuScale + ') translateZ(0)';
+      }
+
       if (!menuVisible) {
         // Pop in like the app's native contextual sheets (spring-ish overshoot).
         menuVisible = true;
-        floatingMenu.classList.remove('melnote-toolbar-enter');
-        void floatingMenu.offsetWidth;
-        floatingMenu.classList.add('melnote-toolbar-enter');
+        playMenuEnter();
       }
       var align = alignOf(node);
       var btns = floatingMenu.querySelectorAll('.melnote-btn[data-action^="align-"]');
@@ -402,8 +437,6 @@ export const IMAGE_TOOLS_JS = `
         btns[b].classList.toggle('active', act === 'align-' + align);
       }
 
-      var menuW = floatingMenu.offsetWidth || 320;
-      var menuH = floatingMenu.offsetHeight || 42;
       var viewW = document.documentElement.clientWidth || window.innerWidth;
       var viewH = window.innerHeight;
       var margin = 8;
@@ -578,7 +611,13 @@ export const IMAGE_TOOLS_JS = `
       if (ed) {
         var pos = findImagePos(ed, target);
         if (pos != null) {
+          // Re-seed the overlay on the tapped image and re-arm the enter
+          // animation, so tapping between two images always replays the pop-in
+          // instead of teleporting the existing menu to the new image.
+          selectedPos = pos;
+          menuVisible = false;
           try { ed.chain().setNodeSelection(pos).run(); } catch (e) { }
+          positionOverlay();
         }
       }
 

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useCallback } from 'react';
-import { StyleSheet, useWindowDimensions } from 'react-native';
+import { StyleSheet } from 'react-native';
 import Animated, {
     Easing,
     useAnimatedStyle,
@@ -26,18 +26,16 @@ interface ScreenMotionProps {
     isTabRoot?: boolean;
 }
 
-const TRAVEL_RATIO = 0.06;
-const ENTER_DURATION = 300;
-const ENTER_FADE_DURATION = 240;
+const ENTER_SCALE_FROM = 0.9;
+const ENTER_DURATION = 330;
+const ENTER_FADE_DURATION = 220;
 
 const EXIT_SCALE_TARGET = 0.94;
 const EXIT_DURATION = 110;
 const EXIT_FADE_DURATION = 95;
 const EXIT_DISPATCH_DELAY = 50;
 
-const RE_ARRIVAL_FADE_DURATION = 60;
-
-const EASING_ENTER = Easing.out(Easing.cubic);
+const EASING_ENTER = Easing.out(Easing.back(1.15));
 const EASING_EXIT = Easing.in(Easing.quad);
 
 export function ScreenMotion({
@@ -46,13 +44,10 @@ export function ScreenMotion({
     enabled = true,
     isTabRoot = false,
 }: ScreenMotionProps) {
-    const { height } = useWindowDimensions();
     const reduceMotion = useReducedMotion();
     const animate = enabled && !reduceMotion;
-    const enterOffset = Math.round(height * TRAVEL_RATIO);
 
-    const translateY = useSharedValue(animate && !isTabRoot ? enterOffset : 0);
-    const scale = useSharedValue(1);
+    const scale = useSharedValue(animate && !isTabRoot ? ENTER_SCALE_FROM : 1);
     const opacity = useSharedValue(animate && !isTabRoot ? 0 : 1);
 
     const leavingRef = useRef(false);
@@ -60,42 +55,40 @@ export function ScreenMotion({
     const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const hasBeenBlurred = useRef(false);
 
-    // Enter Pop-In
+    // Enter Pop-In: the screen expands into place instead of sliding up.
     useEffect(() => {
         if (!animate || isTabRoot) {
-            translateY.value = 0;
             scale.value = 1;
             opacity.value = 1;
             return;
         }
 
-        scale.value = 1;
-        translateY.value = withTiming(0, { duration: ENTER_DURATION, easing: EASING_ENTER });
-        opacity.value = withTiming(1, { duration: ENTER_FADE_DURATION, easing: EASING_ENTER });
-    }, [animate, isTabRoot, translateY, scale, opacity]);
+        scale.value = withTiming(1, { duration: ENTER_DURATION, easing: EASING_ENTER });
+        opacity.value = withTiming(1, { duration: ENTER_FADE_DURATION, easing: Easing.out(Easing.quad) });
+    }, [animate, isTabRoot, scale, opacity]);
 
-    // Re-arrival: when this screen regains focus after a child screen pops
+    // Re-arrival: make sure a screen that regains focus never stays in a
+    // half-finished exit state. Guarded so the first focus event does not cut
+    // the mount pop-in short.
     useEffect(() => {
         if (!animate) return;
 
         const unsubscribeBlur = navigation.addListener('blur', () => {
             hasBeenBlurred.current = true;
-            opacity.value = 0;
         });
 
         const unsubscribeFocus = navigation.addListener('focus', () => {
-            if (hasBeenBlurred.current) {
-                translateY.value = 0;
-                scale.value = 1;
-                opacity.value = withTiming(1, { duration: RE_ARRIVAL_FADE_DURATION, easing: EASING_ENTER });
-            }
+            if (!hasBeenBlurred.current) return;
+            hasBeenBlurred.current = false;
+            scale.value = 1;
+            opacity.value = 1;
         });
 
         return () => {
             unsubscribeBlur();
             unsubscribeFocus();
         };
-    }, [animate, navigation, translateY, scale, opacity]);
+    }, [animate, navigation, scale, opacity]);
 
     const dispatchExit = useCallback((action: any) => {
         if (timerRef.current) {
@@ -141,10 +134,7 @@ export function ScreenMotion({
     }, [animate, isTabRoot, navigation, scale, opacity, dispatchExit]);
 
     const animatedStyle = useAnimatedStyle(() => ({
-        transform: [
-            { translateY: translateY.value },
-            { scale: scale.value },
-        ],
+        transform: [{ scale: scale.value }],
         opacity: opacity.value,
     }));
 
