@@ -19,7 +19,7 @@ import { useSettings } from '../../store/SettingsContext';
 import { Avatar } from '../../components/ui/Avatar';
 import * as Haptics from 'expo-haptics';
 import { Modal, Pressable } from 'react-native';
-import Animated, { FadeIn, FadeInDown, FadeInRight, FadeInLeft, Layout, SlideInDown, useSharedValue, useAnimatedScrollHandler, runOnJS, Easing } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeInRight, FadeInLeft, SlideInDown, useSharedValue, useAnimatedScrollHandler, runOnJS, Easing } from 'react-native-reanimated';
 import { DeleteModal } from '../../components/ui/DeleteModal';
 import { ScalePressable } from '../../components/ui/ScalePressable';
 import { Typography } from '../../constants/Typography';
@@ -96,11 +96,10 @@ export default function CalendarScreen() {
     const [selectedReminder, setSelectedReminder] = useState<Reminder | null>(null);
     const [editingReminder, setEditingReminder] = useState<Reminder | null>(null);
     const [eventToDelete, setEventToDelete] = useState<any>(null);
-    const [tabFocusKey, setTabFocusKey] = useState(0);
+    const [animateMonthChange, setAnimateMonthChange] = useState(false);
 
     useFocusEffect(
         useCallback(() => {
-            setTabFocusKey(k => k + 1);
             loadData();
         }, [])
     );
@@ -284,18 +283,21 @@ export default function CalendarScreen() {
     const handlePrevMonth = () => {
         if (hapticsEnabled && Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         setMonthDirection('prev');
+        setAnimateMonthChange(true);
         setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
     };
 
     const handleNextMonth = () => {
         if (hapticsEnabled && Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         setMonthDirection('next');
+        setAnimateMonthChange(true);
         setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
     };
 
     const handleGoToToday = () => {
         if (hapticsEnabled && Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         const today = new Date();
+        setAnimateMonthChange(true);
         setCurrentDate(today);
         setSelectedDate(today);
         setShowDetailModal(true);
@@ -517,7 +519,7 @@ export default function CalendarScreen() {
                         </ScalePressable>
                         <Animated.View
                             key={`month-label-${currentDate.getFullYear()}-${currentDate.getMonth()}`}
-                            entering={(monthDirection === 'next' ? FadeInRight : FadeInLeft).duration(220).springify().damping(22).stiffness(260).mass(0.8)}
+                            entering={animateMonthChange ? (monthDirection === 'next' ? FadeInRight : FadeInLeft).duration(220).springify().damping(22).stiffness(260).mass(0.8) : undefined}
                         >
                             <ThemedText type="defaultSemiBold" style={styles.monthLabel}>
                                 {currentDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
@@ -539,8 +541,8 @@ export default function CalendarScreen() {
                             ))}
                         </View>
                         <Animated.View
-                            key={`days-grid-${currentDate.getFullYear()}-${currentDate.getMonth()}-${tabFocusKey}`}
-                            entering={(monthDirection === 'next' ? FadeInRight : FadeInLeft).duration(260).springify().damping(22).stiffness(240).mass(0.8)}
+                            key={`days-grid-${currentDate.getFullYear()}-${currentDate.getMonth()}`}
+                            entering={animateMonthChange ? (monthDirection === 'next' ? FadeInRight : FadeInLeft).duration(260).springify().damping(22).stiffness(240).mass(0.8) : undefined}
                             style={styles.calendarGrid}
                         >
                             {calendarData.map(renderDay)}
@@ -549,31 +551,24 @@ export default function CalendarScreen() {
                 </View>
 
                 <View style={styles.upcomingSection}>
-                    <Animated.View
-                        key={`upcoming-header-${tabFocusKey}`}
-                        entering={FadeInDown.duration(260).springify().damping(24).stiffness(280).mass(0.7)}
-                        style={styles.sectionHeaderRow}
-                    >
+                    <View style={styles.sectionHeaderRow}>
                         <ThemedText type="sectionHeader" style={styles.upcomingTitle}>Upcoming</ThemedText>
                         <ThemedText style={{ color: colors.secondary, fontSize: 13 }}>This month</ThemedText>
-                    </Animated.View>
+                    </View>
 
                     {upcomingEvents.length === 0 ? (
-                        <Animated.View
-                            key={`upcoming-empty-${tabFocusKey}`}
-                            entering={FadeInDown.duration(260).springify().damping(24).stiffness(280).mass(0.7)}
+                        <View
                             style={[styles.upcomingSheet, styles.upcomingPlaceholderSheet, { backgroundColor: colors.card }]}
                         >
                             <ThemedText style={{ opacity: 0.5, textAlign: 'center' }}>No events this month</ThemedText>
-                        </Animated.View>
+                        </View>
                     ) : (
                         <View style={[styles.upcomingSheet, { backgroundColor: colors.card }]}>
                             {upcomingEvents.map((event, idx) => {
                                 const isLast = idx === upcomingEvents.length - 1;
                                 return (
-                                    <Animated.View
-                                        key={`event-${tabFocusKey}-${event.type}-${event.person?.id ?? event.reminder?.id ?? event.title}-${idx}`}
-                                        entering={FadeInDown.delay(Math.min(idx, 6) * 15).duration(260).springify().damping(24).stiffness(280).mass(0.7)}
+                                    <View
+                                        key={`event-${event.type}-${event.person?.id ?? event.reminder?.id ?? event.title}-${idx}`}
                                     >
                                         <ScalePressable
                                             onPress={() => {
@@ -612,7 +607,7 @@ export default function CalendarScreen() {
                                             )}
                                         </ScalePressable>
                                         {!isLast && <View style={[styles.rowDivider, { backgroundColor: colors.border }]} />}
-                                    </Animated.View>
+                                    </View>
                                 );
                             })}
                         </View>

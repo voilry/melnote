@@ -8,6 +8,8 @@ import { useAppTheme } from '../../hooks/useAppTheme';
 import type { Person } from '../../db/repositories/PersonRepository';
 import * as Haptics from 'expo-haptics';
 import { Typography } from '../../constants/Typography';
+import { DesignSystem } from '../../constants/DesignSystem';
+import { useKeyboardState } from 'react-native-keyboard-controller';
 import { ScreenHeader } from '../ui/ScreenHeader';
 import { ScalePressable } from '../ui/ScalePressable';
 import Animated, { Easing, FadeInDown } from 'react-native-reanimated';
@@ -37,6 +39,7 @@ export function PersonPickerModal({
 }: PersonPickerModalProps) {
     const { colors, hapticsEnabled } = useAppTheme();
     const insets = useSafeAreaInsets();
+    const keyboardVisible = useKeyboardState((state) => state.isVisible);
     const [search, setSearch] = useState('');
 
     // Clear stale filter on close — otherwise reopening shows the old
@@ -154,7 +157,10 @@ export function PersonPickerModal({
                         </Animated.View>
                     )}
                     ListEmptyComponent={
-                        <View style={styles.empty}>
+                        <View style={[
+                            styles.empty,
+                            query.length > 0 && keyboardVisible && styles.emptyKeyboardShift
+                        ]}>
                             <Users size={30} color={colors.textTertiary} weight="fill" />
                             <ThemedText style={[styles.emptyTitle, { color: colors.text }]}>
                                 {people.length === 0
@@ -236,6 +242,9 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingHorizontal: 24,
         paddingBottom: 60,
+    },
+    emptyKeyboardShift: {
+        transform: [{ translateY: -DesignSystem.spacing['3xl'] }],
     },
     emptyTitle: {
         marginTop: 14,

@@ -23,6 +23,7 @@ import { DeleteModal } from '../../components/ui/DeleteModal';
 import { SearchBar } from '../../components/ui/SearchBar';
 import { Badge } from '../../components/ui/Badge';
 import { Swipeable } from 'react-native-gesture-handler';
+import { useKeyboardState } from 'react-native-keyboard-controller';
 
 import { QuickScrollButton } from '../../components/ui/QuickScrollButton';
 import { markdownPreviewText } from '../../utils/markdownConverter';
@@ -128,6 +129,7 @@ export default function JournalScreen() {
     // Remove inline new journal state since we use the /journal/[id] route
 
     const { colors, theme, hapticsEnabled } = useAppTheme();
+    const keyboardVisible = useKeyboardState((state) => state.isVisible);
 
     useFocusEffect(
         useCallback(() => {
@@ -342,7 +344,10 @@ export default function JournalScreen() {
                 removeClippedSubviews={true}
                 ListEmptyComponent={
                     isLoading ? null : (
-                        <View style={styles.emptyContainer}>
+                        <View style={[
+                            styles.emptyContainer,
+                            searchQuery.trim().length > 0 && keyboardVisible && styles.emptyKeyboardShift
+                        ]}>
                             {searchQuery ? <SearchNoResults size={64} color={colors.icon} weight="fill" /> : <PenTool size={48} color={colors.tint} weight="fill" />}
                             <ThemedText style={[styles.emptyTitle, { fontFamily: Typography.fontFamily.bold }]}>
                                 {searchQuery ? 'No results' : 'Journal'}
@@ -428,6 +433,9 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         paddingHorizontal: 40,
         alignItems: 'center',
+    },
+    emptyKeyboardShift: {
+        transform: [{ translateY: -DesignSystem.spacing['3xl'] }],
     },
     emptyIconContainer: {
         width: 72,

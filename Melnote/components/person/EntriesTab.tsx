@@ -13,6 +13,7 @@ import { Plus, FileText, MagnifyingGlass as Search, Sparkle as Sparkles, Coffee,
 import { useRouter } from 'expo-router';
 import { useAppTheme } from '../../hooks/useAppTheme';
 import { BlurView } from 'expo-blur';
+import { useKeyboardState } from 'react-native-keyboard-controller';
 
 interface EntriesTabProps {
     entries: any[];
@@ -25,6 +26,7 @@ interface EntriesTabProps {
 export function EntriesTab({ entries, onAdd, onDelete, theme, isAcrylic }: EntriesTabProps) {
     const router = useRouter();
     const { colors } = useAppTheme();
+    const keyboardVisible = useKeyboardState((state) => state.isVisible);
     const [search, setSearch] = useState('');
 
     const filteredEntries = useMemo(() => {
@@ -182,6 +184,7 @@ export function EntriesTab({ entries, onAdd, onDelete, theme, isAcrylic }: Entri
                     <ThemedText style={{ color: colors.secondary, marginTop: 4, fontSize: 13, textAlign: 'center' }}>
                         {search ? 'Try a different search term.' : 'Keep track of specific details here.'}
                     </ThemedText>
+                    {search.trim().length > 0 && keyboardVisible && <View style={styles.keyboardScrollSpacer} />}
                 </Animated.View>
             ) : (
                 filteredEntries.map((entry, index) => {
@@ -290,6 +293,10 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingVertical: 40,
         opacity: 0.8,
+    },
+    keyboardScrollSpacer: {
+        width: '100%',
+        height: 220,
     },
     entryMeta: {
         flexDirection: 'row',

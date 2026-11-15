@@ -1,6 +1,6 @@
 import { View, StyleSheet, Modal, TextInput, Platform, ScrollView, DeviceEventEmitter, Keyboard, Dimensions } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
+import { KeyboardAwareScrollView, useKeyboardState } from 'react-native-keyboard-controller';
 import * as Haptics from 'expo-haptics';
 import Animated, { FadeIn, FadeOut, FadeInDown, Easing, useSharedValue, useAnimatedStyle, withTiming, runOnJS } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -40,6 +40,7 @@ const DEFAULT_NUDGE = 'on_time';
 // they sit against. Matching only the track left them reading as small pills,
 // so these match the whole column and stay a touch slimmer than the track is wide.
 const CONTROL_HEIGHT = 45;
+const KEYBOARD_SCROLL_SPACE = 80;
 
 interface AddReminderModalProps {
     visible: boolean;
@@ -52,6 +53,7 @@ interface AddReminderModalProps {
 export function AddReminderModal({ visible, onClose, date, onSuccess, editingReminder }: AddReminderModalProps) {
     const { colors, hapticsEnabled } = useAppTheme();
     const insets = useSafeAreaInsets();
+    const keyboardVisible = useKeyboardState((state) => state.isVisible);
 
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
@@ -66,7 +68,6 @@ export function AddReminderModal({ visible, onClose, date, onSuccess, editingRem
     const [styleIcon, setStyleIcon] = useState<string>('Bell');
     const [styleColor, setStyleColor] = useState<string>(REMINDER_COLORS[0].value);
     const lastPresetRef = useRef(DEFAULT_NUDGE);
-    const searchInputRef = useRef<TextInput>(null);
     const mountedRef = useRef(true);
     const initializedRef = useRef(false);
 
@@ -359,7 +360,11 @@ export function AddReminderModal({ visible, onClose, date, onSuccess, editingRem
                     style={{ flex: 1 }}
                     showsVerticalScrollIndicator={false}
                     keyboardShouldPersistTaps="handled"
-                    contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 12, paddingBottom: insets.bottom + 40 }}
+                    contentContainerStyle={{
+                        paddingHorizontal: 24,
+                        paddingTop: 12,
+                        paddingBottom: insets.bottom + 40 + (keyboardVisible ? KEYBOARD_SCROLL_SPACE : 0),
+                    }}
                     bottomOffset={24}
                 >
                         <View style={[styles.inputSection, { marginTop: 8 }]}>
@@ -577,22 +582,16 @@ export function AddReminderModal({ visible, onClose, date, onSuccess, editingRem
                                 </Animated.View>
                             ) : (
                                 <>
-                                    <ScalePressable 
-                                        onPress={() => searchInputRef.current?.focus()}
-                                        style={[styles.searchBox, { backgroundColor: colors.surface }]}
-                                        scaleTo={0.98}
-                                        overlayColor="transparent"
-                                    >
+                                    <View style={[styles.searchBox, { backgroundColor: colors.surface }]}>
                                         <MagnifyingGlass size={18} color={colors.icon} />
                                         <TextInput
-                                            ref={searchInputRef}
                                             value={searchQuery}
                                             onChangeText={setSearchQuery}
                                             placeholder="Search people..."
                                             placeholderTextColor={colors.icon}
                                             style={[styles.searchInput, { color: colors.text }]}
                                         />
-                                    </ScalePressable>
+                                    </View>
 
                                     <View style={styles.peopleList}>
                                         {filteredPeople.map((p) => (

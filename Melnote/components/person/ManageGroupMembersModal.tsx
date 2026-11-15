@@ -1143,7 +1143,10 @@ export const ManageGroupMembersModal = ({
                                 );
                             }}
                             ListEmptyComponent={
-                                <View style={styles.addEmpty}>
+                                <View style={[
+                                    styles.addEmpty,
+                                    query.trim().length > 0 && keyboardVisible && styles.addEmptyKeyboardShift
+                                ]}>
                                     <Users size={30} color={colors.textTertiary} weight="fill" />
                                     <ThemedText
                                         style={[styles.addEmptyTitle, { color: colors.text }]}
@@ -1553,6 +1556,9 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingHorizontal: 24,
         paddingVertical: 32,
+    },
+    addEmptyKeyboardShift: {
+        transform: [{ translateY: -DesignSystem.spacing['3xl'] }],
     },
     addEmptyTitle: {
         marginTop: 14,

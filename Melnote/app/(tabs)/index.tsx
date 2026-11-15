@@ -1,5 +1,5 @@
 import { View, StyleSheet, FlatList, TouchableOpacity, Modal, TextInput, Platform, ScrollView, Dimensions, Alert, DeviceEventEmitter, Pressable, BackHandler } from 'react-native';
-import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
+import { KeyboardAwareScrollView, useKeyboardState } from 'react-native-keyboard-controller';
 import Animated, { FadeInDown, Layout, FadeIn, FadeOut, SlideInDown, SlideOutDown, ZoomIn, useSharedValue, useAnimatedScrollHandler, runOnJS, Easing } from 'react-native-reanimated';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -112,6 +112,7 @@ export default function PeopleScreen() {
     const [selectedGroupId, setSelectedGroupId] = useState<number | null>(null);
     const { colors, theme, hapticsEnabled } = useAppTheme();
     const { settings } = useSettings();
+    const keyboardVisible = useKeyboardState((state) => state.isVisible);
 
     // Scroll Logic
     const scrollY = useSharedValue(0);
@@ -910,7 +911,10 @@ export default function PeopleScreen() {
                 }
                 ListEmptyComponent={
                     (isLoading || isGroupSwitching || isDashboardActive) ? null : (
-                        <View style={styles.emptyContainer}>
+                        <View style={[
+                            styles.emptyContainer,
+                            search.trim().length > 0 && keyboardVisible && styles.emptyKeyboardShift
+                        ]}>
                             {search ? <SearchNoResults size={64} color={colors.icon} weight="fill" /> : <UserIcon size={48} color={colors.tint} weight="fill" />}
                             <ThemedText style={[styles.emptyTitle, { fontFamily: Typography.fontFamily.bold }]}>
                                 {search ? 'No results' : selectedGroupId ? 'Group Empty' : 'Network'}
@@ -1454,6 +1458,9 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         paddingHorizontal: 40,
         alignItems: 'center',
+    },
+    emptyKeyboardShift: {
+        transform: [{ translateY: -DesignSystem.spacing['3xl'] }],
     },
     emptyIconContainer: {
         width: 72,
