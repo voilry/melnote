@@ -19,6 +19,7 @@ import Animated, {
     withTiming,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
+import { StatusBar } from 'expo-status-bar';
 import { ThemedText } from './ThemedText';
 import { Icon } from './Icon';
 import { ScalePressable } from './ScalePressable';
@@ -72,6 +73,11 @@ export function ImageCropView({ uri, busy = false, onCancel, onConfirm }: ImageC
     const [failed, setFailed] = React.useState(false);
     const [ratio, setRatio] = React.useState<number | null>(null);
     const [applying, setApplying] = React.useState(false);
+    // The frame geometry lives in shared values that start at zero, so the
+    // overlay must not mount until they hold the image rect. Otherwise the
+    // border and the four handles paint stacked at the canvas corner for the
+    // first frames.
+    const [frameReady, setFrameReady] = React.useState(false);
 
     // Frame geometry, in canvas coordinates.
     const fx = useSharedValue(0);
@@ -128,12 +134,18 @@ export function ImageCropView({ uri, busy = false, onCancel, onConfirm }: ImageC
     }, [canvas, natural]);
 
     // Start with the frame on the whole image whenever the display rect lands.
+    // `frameReady` is set in the same layout pass so the overlay never paints
+    // with the shared values still at their zero defaults.
     React.useLayoutEffect(() => {
-        if (!imageRect) return;
+        if (!imageRect) {
+            setFrameReady(false);
+            return;
+        }
         fx.value = imageRect.x;
         fy.value = imageRect.y;
         fw.value = imageRect.width;
         fh.value = imageRect.height;
+        setFrameReady(true);
     }, [imageRect, fx, fy, fw, fh]);
 
     const imgX = imageRect?.x ?? 0;
@@ -143,9 +155,13 @@ export function ImageCropView({ uri, busy = false, onCancel, onConfirm }: ImageC
 
     const bodyGesture = Gesture.Pan()
         .onBegin(() => {
-            grid.value = withTiming(1, { duration: 120 });
             startX.value = fx.value;
             startY.value = fy.value;
+        })
+        .onStart(() => {
+            // Only show the thirds once the frame is actually being dragged, so
+            // a plain tap on the crop area does not flash the grid.
+            grid.value = withTiming(1, { duration: 120 });
         })
         .onUpdate((event) => {
             fx.value = clamp(startX.value + event.translationX, imgX, imgX + imgW - fw.value);
@@ -158,11 +174,13 @@ export function ImageCropView({ uri, busy = false, onCancel, onConfirm }: ImageC
     const cornerGesture = (corner: Corner) =>
         Gesture.Pan()
             .onBegin(() => {
-                grid.value = withTiming(1, { duration: 120 });
                 startX.value = fx.value;
                 startY.value = fy.value;
                 startW.value = fw.value;
                 startH.value = fh.value;
+            })
+            .onStart(() => {
+                grid.value = withTiming(1, { duration: 120 });
                 runOnJS(tick)();
             })
             .onUpdate((event) => {
@@ -178,8 +196,11 @@ export function ImageCropView({ uri, busy = false, onCancel, onConfirm }: ImageC
                 const maxW = left ? fixedX - imgX : imgX + imgW - fixedX;
                 const maxH = top ? fixedY - imgY : imgY + imgH - fixedY;
 
-                let w = Math.abs(cornerX - fixedX);
-                let h = Math.abs(cornerY - fixedY);
+                // Signed extents: a corner dragged past the opposite edge stops
+                // at the minimum instead of making the frame grow out the other
+                // side.
+                let w = left ? fixedX - cornerX : cornerX - fixedX;
+                let h = top ? fixedY - cornerY : cornerY - fixedY;
 
                 if (ratio != null) {
                     if (w / h > ratio) h = w / ratio;
@@ -254,25 +275,34 @@ export function ImageCropView({ uri, busy = false, onCancel, onConfirm }: ImageC
         const centerX = fx.value + fw.value / 2;
         const centerY = fy.value + fh.value / 2;
 
-        // Keep the smaller dimension of the current frame and fit the ratio
-        // inside it, so picking an aspect never balloons the frame.
-        let width = Math.min(fw.value, fh.value * value);
+        // Use the largest frame of this ratio the bitmap can hold, centred on
+        // the current frame. Fitting every new ratio inside the previous frame
+        // made 16:9 → 4:5 → 3:2 shrink the crop a little more each time.
+        let width = imageRect.width;
         let height = width / value;
-        if (width < MIN_SIZE) {
-            width = MIN_SIZE;
-            height = width / value;
-        }
-        if (height < MIN_SIZE) {
-            height = MIN_SIZE;
-            width = height * value;
-        }
-        if (width > imageRect.width) {
-            width = imageRect.width;
-            height = width / value;
-        }
         if (height > imageRect.height) {
             height = imageRect.height;
             width = height * value;
+        }
+
+        // Never let an extreme ratio collapse into an untappable sliver, but
+        // only grow when the bitmap actually has that much room (a panorama is
+        // physically narrower than the minimum).
+        if (width < MIN_SIZE && imageRect.width >= MIN_SIZE) {
+            width = MIN_SIZE;
+            height = width / value;
+            if (height > imageRect.height) {
+                height = imageRect.height;
+                width = height * value;
+            }
+        }
+        if (height < MIN_SIZE && imageRect.height >= MIN_SIZE) {
+            height = MIN_SIZE;
+            width = height * value;
+            if (width > imageRect.width) {
+                width = imageRect.width;
+                height = width / value;
+            }
         }
 
         const x = clamp(centerX - width / 2, imageRect.x, imageRect.x + imageRect.width - width);
@@ -300,12 +330,14 @@ export function ImageCropView({ uri, busy = false, onCancel, onConfirm }: ImageC
         const height = clamp(Math.round(fh.value * scale), 1, natural.height - originY);
 
         // The frame still covers the whole bitmap: nothing to crop, just leave
-        // the view instead of re-encoding an identical image.
+        // the view instead of re-encoding an identical image. Compare with a
+        // one-pixel tolerance because the display -> source scale is a float,
+        // so an untouched frame can land a pixel short after rounding.
         if (
-            originX === 0 &&
-            originY === 0 &&
-            width === natural.width &&
-            height === natural.height
+            originX <= 1 &&
+            originY <= 1 &&
+            width >= natural.width - 1 &&
+            height >= natural.height - 1
         ) {
             onCancel();
             return;
@@ -334,16 +366,18 @@ export function ImageCropView({ uri, busy = false, onCancel, onConfirm }: ImageC
     ];
 
     const blocked = busy || applying;
-    const ready = imageRect !== null;
+    const ready = frameReady && imageRect !== null;
 
     return (
         <GestureHandlerRootView style={styles.root}>
+            <StatusBar style="light" />
             <View style={[styles.root, { paddingTop: insets.top + 10 }]}>
                 <View style={styles.header}>
                     <View style={styles.headerSlot}>
                         <ScalePressable
                             onPress={cancel}
-                            style={[styles.headerButton, { backgroundColor: colors.surface }]}
+                            disabled={blocked}
+                            style={[styles.headerButton, { backgroundColor: colors.surface, opacity: blocked ? 0.4 : 1 }]}
                             innerStyle={{ borderRadius: 20 }}
                             accessibilityLabel="Cancel crop"
                         >
@@ -354,37 +388,34 @@ export function ImageCropView({ uri, busy = false, onCancel, onConfirm }: ImageC
                     <View style={[styles.headerSlot, styles.headerSlotRight]}>
                         <ScalePressable
                             onPress={confirm}
-                            disabled={!ready}
+                            disabled={!ready || blocked}
                             haptic={false}
-                            style={[
-                                styles.doneButton,
-                                { backgroundColor: colors.tint, opacity: ready ? 1 : 0.4 },
-                            ]}
+                            style={[styles.headerButton, { backgroundColor: colors.tint, opacity: blocked ? 0.4 : 1 }]}
                             innerStyle={{ borderRadius: 20 }}
                             accessibilityLabel="Apply crop"
                         >
-                            <ThemedText style={[styles.doneText, { color: colors.tintContrast }]}>
-                                Done
-                            </ThemedText>
+                            <Icon name="check_line" size={20} color={colors.tintContrast} />
                         </ScalePressable>
                     </View>
                 </View>
 
                 <View style={styles.canvas} onLayout={onCanvasLayout}>
+                    {imageRect && (
+                        <Image
+                            source={{ uri }}
+                            style={{
+                                position: 'absolute',
+                                left: imageRect.x,
+                                top: imageRect.y,
+                                width: imageRect.width,
+                                height: imageRect.height,
+                            }}
+                            resizeMode="stretch"
+                        />
+                    )}
+
                     {ready && imageRect && (
                         <>
-                            <Image
-                                source={{ uri }}
-                                style={{
-                                    position: 'absolute',
-                                    left: imageRect.x,
-                                    top: imageRect.y,
-                                    width: imageRect.width,
-                                    height: imageRect.height,
-                                }}
-                                resizeMode="stretch"
-                            />
-
                             {/* Dim everything outside the crop frame. */}
                             <Animated.View
                                 pointerEvents="none"
@@ -412,10 +443,10 @@ export function ImageCropView({ uri, busy = false, onCancel, onConfirm }: ImageC
                                     pointerEvents="none"
                                     style={[StyleSheet.absoluteFill, gridStyle]}
                                 >
-                                    <View style={[styles.gridLine, styles.gridLineV, { left: '33.333%' }]} />
-                                    <View style={[styles.gridLine, styles.gridLineV, { left: '66.666%' }]} />
-                                    <View style={[styles.gridLine, styles.gridLineH, { top: '33.333%' }]} />
-                                    <View style={[styles.gridLine, styles.gridLineH, { top: '66.666%' }]} />
+                                    <View style={[styles.gridLine, styles.gridLineV, { left: '33.3333%' }]} />
+                                    <View style={[styles.gridLine, styles.gridLineV, { left: '66.6667%' }]} />
+                                    <View style={[styles.gridLine, styles.gridLineH, { top: '33.3333%' }]} />
+                                    <View style={[styles.gridLine, styles.gridLineH, { top: '66.6667%' }]} />
                                 </Animated.View>
                             </Animated.View>
 
@@ -457,9 +488,16 @@ export function ImageCropView({ uri, busy = false, onCancel, onConfirm }: ImageC
                                     key={option.label}
                                     onPress={() => chooseRatio(option.value)}
                                     haptic={false}
+                                    // Aspect only means something once the image
+                                    // rect exists; before that the chip would
+                                    // show as active while the frame stays free.
+                                    disabled={blocked || !ready}
                                     style={[
                                         styles.ratioChip,
-                                        { backgroundColor: active ? colors.tint : colors.surface },
+                                        {
+                                            backgroundColor: active ? colors.tint : colors.surface,
+                                            opacity: blocked || !ready ? 0.5 : 1,
+                                        },
                                     ]}
                                     innerStyle={{ borderRadius: 19 }}
                                     accessibilityLabel={`Crop aspect ${option.label}`}
@@ -489,10 +527,26 @@ export function ImageCropView({ uri, busy = false, onCancel, onConfirm }: ImageC
 }
 
 const bracketStyle: Record<Corner, ViewStyle> = {
-    tl: { borderLeftWidth: HANDLE_THICKNESS, borderTopWidth: HANDLE_THICKNESS, borderTopLeftRadius: 4 },
-    tr: { borderRightWidth: HANDLE_THICKNESS, borderTopWidth: HANDLE_THICKNESS, borderTopRightRadius: 4 },
-    bl: { borderLeftWidth: HANDLE_THICKNESS, borderBottomWidth: HANDLE_THICKNESS, borderBottomLeftRadius: 4 },
-    br: { borderRightWidth: HANDLE_THICKNESS, borderBottomWidth: HANDLE_THICKNESS, borderBottomRightRadius: 4 },
+    tl: {
+        borderLeftWidth: HANDLE_THICKNESS,
+        borderTopWidth: HANDLE_THICKNESS,
+        borderTopLeftRadius: 4,
+    },
+    tr: {
+        borderRightWidth: HANDLE_THICKNESS,
+        borderTopWidth: HANDLE_THICKNESS,
+        borderTopRightRadius: 4,
+    },
+    bl: {
+        borderLeftWidth: HANDLE_THICKNESS,
+        borderBottomWidth: HANDLE_THICKNESS,
+        borderBottomLeftRadius: 4,
+    },
+    br: {
+        borderRightWidth: HANDLE_THICKNESS,
+        borderBottomWidth: HANDLE_THICKNESS,
+        borderBottomRightRadius: 4,
+    },
 };
 
 const styles = StyleSheet.create({
@@ -526,17 +580,6 @@ const styles = StyleSheet.create({
         color: '#ffffff',
         fontSize: 17,
         fontFamily: Typography.fontFamily.bold,
-    },
-    doneButton: {
-        height: 40,
-        paddingHorizontal: 20,
-        borderRadius: 20,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    doneText: {
-        fontSize: 15,
-        fontFamily: Typography.fontFamily.semibold,
     },
     canvas: {
         flex: 1,

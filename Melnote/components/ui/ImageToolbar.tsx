@@ -108,9 +108,15 @@ export function ImageToolbar({
         if (hapticsEnabled && Platform.OS !== 'web') Haptics.impactAsync(style);
     };
 
+    /** Keeps the ref in step with state so an action can never read a stale URI. */
+    const updateWorkingSrc = React.useCallback((uri: string) => {
+        workingSrcRef.current = uri;
+        setWorkingSrc(uri);
+    }, []);
+
     React.useEffect(() => {
-        setWorkingSrc(selection.src);
-    }, [selection.src, selection.pos]);
+        updateWorkingSrc(selection.src);
+    }, [selection.src, selection.pos, updateWorkingSrc]);
 
     const setSheet = (open: boolean) => onSheetOpenChange?.(open);
 
@@ -141,7 +147,7 @@ export function ImageToolbar({
         }
         haptic();
         appliedSrcRef.current = null;
-        setWorkingSrc(selection.src);
+        updateWorkingSrc(selection.src);
         setEditOpen(true);
         setSheet(true);
     }, [selection.src]);
@@ -181,7 +187,7 @@ export function ImageToolbar({
             return;
         }
         removeWorkingFile(previous);
-        setWorkingSrc(result.uri);
+        updateWorkingSrc(result.uri);
         setCropOpen(false);
     };
 
@@ -189,14 +195,17 @@ export function ImageToolbar({
         if (editing) return;
         haptic();
         removeWorkingFile(workingSrcRef.current);
-        setWorkingSrc(selection.src);
+        updateWorkingSrc(selection.src);
     };
 
     const applyEdit = () => {
         haptic();
-        if (workingSrc !== selection.src) {
-            appliedSrcRef.current = workingSrc;
-            onUpdate({ src: workingSrc });
+        // Read the ref, not the state: an edit that finished in the same tick
+        // as the tap would otherwise be dropped and its temp file swept away.
+        const current = workingSrcRef.current;
+        if (current !== selection.src) {
+            appliedSrcRef.current = current;
+            onUpdate({ src: current });
         }
         closeEdit();
     };
@@ -216,7 +225,7 @@ export function ImageToolbar({
             return;
         }
         removeWorkingFile(previous);
-        setWorkingSrc(result.uri);
+        updateWorkingSrc(result.uri);
     };
 
     const openReplace = React.useCallback(() => {
@@ -441,6 +450,7 @@ export function ImageToolbar({
                                 label="Rotate -90°"
                                 color={colors.text}
                                 background={colors.surface}
+                                disabled={editing}
                                 onPress={() => runEdit({ type: 'rotate', degrees: -90 })}
                             />
                             <EditAction
@@ -448,20 +458,23 @@ export function ImageToolbar({
                                 label="Rotate +90°"
                                 color={colors.text}
                                 background={colors.surface}
+                                disabled={editing}
                                 onPress={() => runEdit({ type: 'rotate', degrees: 90 })}
                             />
                             <EditAction
-                                icon="flip_horizontal_line"
-                                label="Flip H"
+                                icon="flip_vertical_line"
+                                label="Flip X"
                                 color={colors.text}
                                 background={colors.surface}
+                                disabled={editing}
                                 onPress={() => runEdit({ type: 'flip', axis: 'horizontal' })}
                             />
                             <EditAction
-                                icon="flip_vertical_line"
-                                label="Flip V"
+                                icon="flip_horizontal_line"
+                                label="Flip Y"
                                 color={colors.text}
                                 background={colors.surface}
+                                disabled={editing}
                                 onPress={() => runEdit({ type: 'flip', axis: 'vertical' })}
                             />
                         </View>
@@ -494,17 +507,14 @@ export function ImageToolbar({
                 </Pressable>
 
                 {cropOpen && (
-                    <Animated.View
-                        entering={FadeIn.duration(200).easing(EASE_ENTER)}
-                        style={StyleSheet.absoluteFill}
-                    >
+                    <View style={StyleSheet.absoluteFill}>
                         <ImageCropView
                             uri={workingSrc}
                             busy={editing}
                             onCancel={closeCrop}
                             onConfirm={applyCrop}
                         />
-                    </Animated.View>
+                    </View>
                 )}
             </View>
         </Modal>
@@ -598,19 +608,22 @@ function EditAction({
     label,
     color,
     background,
+    disabled = false,
     onPress,
 }: {
     icon: any;
     label: string;
     color: string;
     background: string;
+    disabled?: boolean;
     onPress: () => void;
 }) {
     return (
         <ScalePressable
             onPress={onPress}
             haptic={false}
-            style={[styles.editAction, { backgroundColor: background }]}
+            disabled={disabled}
+            style={[styles.editAction, { backgroundColor: background, opacity: disabled ? 0.4 : 1 }]}
             innerStyle={{ borderRadius: 14 }}
             accessibilityLabel={label}
         >
