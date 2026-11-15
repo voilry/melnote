@@ -1,0 +1,80 @@
+name: Build Android Production AAB (Local)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: './Melnote/package-lock.json'
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Expo
+        uses: expo/expo-github-action@v8
+        with:
+          expo-version: latest
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Prepare Android signing credentials
+        env:
+          ENCODED_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          missing=()
+          [ -n "$ENCODED_KEYSTORE" ] || missing+=("ANDROID_KEYSTORE_BASE64")
+          [ -n "$KEYSTORE_PASSWORD" ] || missing+=("ANDROID_KEYSTORE_PASSWORD")
+          [ -n "$KEY_ALIAS" ] || missing+=("ANDROID_KEY_ALIAS")
+          [ -n "$KEY_PASSWORD" ] || missing+=("ANDROID_KEY_PASSWORD")
+
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing required GitHub secrets: ${missing[*]}"
+            exit 1
+          fi
+
+          echo "$ENCODED_KEYSTORE" | base64 --decode > ./Melnote/android-keystore.jks
+          if [ ! -s ./Melnote/android-keystore.jks ]; then
+            echo "::error::The decoded Android keystore is empty or invalid."
+            exit 1
+          fi
+
+      - name: Install dependencies
+        working-directory: ./Melnote
+        run: npm ci
+
+      - name: Build production AAB locally
+        working-directory: ./Melnote
+        env:
+          EAS_LOCAL_BUILD_SKIP_CLEANUP: 1
+          EXPO_ANDROID_KEYSTORE_PATH: ${{ github.workspace }}/Melnote/android-keystore.jks
+          EXPO_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          EXPO_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          EXPO_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: eas build --platform android --profile production --local --non-interactive --output ./build/melnote.aab
+
+      - name: Securely Delete Keystore
+        if: always()
+        run: rm -f ./Melnote/android-keystore.jks
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: melnote-aab
+          path: ./Melnote/build/melnote.aab
+          retention-days: 7

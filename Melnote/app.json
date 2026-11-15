@@ -42,7 +42,9 @@
           "android": {
             "buildArchs": [
               "arm64-v8a"
-            ]
+            ],
+            "minSdkVersion": 29,
+            "targetSdkVersion": 36
           }
         }
       ]
