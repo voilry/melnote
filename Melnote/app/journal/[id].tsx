@@ -183,11 +183,31 @@ export default function JournalEditorScreen() {
         return hasChanges;
     }, [id, hasChanges]);
 
+    // Leaving edit mode keeps the entry open and shows the reader again.
+    // Shared by the header button and the hardware back / back gesture.
+    const exitEditMode = useCallback(() => {
+        setIsEditing(false);
+        setImageSelection(null);
+        setTitle(journal?.title || '');
+        setContent(journal?.content || '');
+        setSelectedPeople(taggedPeople.map((t: any) => t.person.id));
+    }, [journal, taggedPeople]);
+
+    // Hardware back mirrors the header button. On Android this is also the
+    // edge-swipe back gesture: the system routes it through the JS back
+    // handler, so returning true keeps the entry on screen and drops the
+    // user back into the reader instead of closing the whole journal.
     useFocusEffect(
         useCallback(() => {
             const onBackPress = () => {
-                if (isEditing && hasChanges) {
-                    setShowDiscardModal(true);
+                if (isEditing) {
+                    if (hasChanges) {
+                        setShowDiscardModal(true);
+                    } else if (id === 'new') {
+                        router.back();
+                    } else {
+                        exitEditMode();
+                    }
                     return true;
                 }
                 return false;
@@ -195,7 +215,7 @@ export default function JournalEditorScreen() {
 
             const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
             return () => subscription.remove();
-        }, [isEditing, hasChanges])
+        }, [isEditing, hasChanges, exitEditMode, id, router])
     );
 
     useEffect(() => {
@@ -457,16 +477,10 @@ export default function JournalEditorScreen() {
                     if (isEditing) {
                         if (hasChanges) {
                             setShowDiscardModal(true);
+                        } else if (id === 'new') {
+                            router.back();
                         } else {
-                            if (id === 'new') {
-                                router.back();
-                            } else {
-                                setIsEditing(false);
-                                setImageSelection(null);
-                                setTitle(journal.title || '');
-                                setContent(journal.content || '');
-                                setSelectedPeople(taggedPeople.map((t: any) => t.person.id));
-                            }
+                            exitEditMode();
                         }
                     } else if (!content.trim() && !title.trim()) {
                         handleDelete(true);

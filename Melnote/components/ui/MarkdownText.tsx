@@ -6,7 +6,7 @@ import { Typography } from '../../constants/Typography';
 import { escapedMentionPatterns } from '../../utils/mentions';
 import { mediaUri } from '../../utils/media';
 import { ImageViewer, type ViewerImage } from './ImageViewer';
-import { parseMarkdownImage, collectMarkdownImages, type ImageAlign, type MarkdownImageInfo } from '../../utils/markdownConverter';
+import { parseMarkdownImage, type ImageAlign, type MarkdownImageInfo } from '../../utils/markdownConverter';
 
 interface MarkdownTextProps {
     content: string;
@@ -91,24 +91,24 @@ export const MarkdownText: React.FC<MarkdownTextProps> = ({ content, style, padd
     const { colors } = useAppTheme();
 
     // Reader image paging: one shared viewer for every image in the entry.
-    // `imageLineIndex` maps a split line number to its position in the image
-    // list so tapping any image opens the viewer on that image.
-    const images = React.useMemo(() => collectMarkdownImages(content), [content]);
-    const imageLineIndex = React.useMemo(() => {
-        const map = new Map<number, number>();
-        let next = 0;
-        content.split(/\r\n|\r|\n/).forEach((line, lineIndex) => {
-            if (parseMarkdownImage(line.trim())) {
-                map.set(lineIndex, next);
-                next += 1;
-            }
+    // The rendered lines, the image list and the line -> image-position map
+    // all come from ONE pass over the document, so they can never disagree.
+    // Building the list separately let the viewer clamp an out-of-range
+    // index back to image 1 when you tapped a later image.
+    const { lines, imageLineIndex, viewerImages } = React.useMemo(() => {
+        const lines = content.split(/\r\n|\r|\n/);
+        const imageLineIndex = new Map<number, number>();
+        const viewerImages: ViewerImage[] = [];
+
+        lines.forEach((line, lineIndex) => {
+            const image = parseMarkdownImage(line.trim());
+            if (!image) return;
+            imageLineIndex.set(lineIndex, viewerImages.length);
+            viewerImages.push({ uri: mediaUri(image.src), caption: image.caption });
         });
-        return map;
+
+        return { lines, imageLineIndex, viewerImages };
     }, [content]);
-    const viewerImages = React.useMemo<ViewerImage[]>(
-        () => images.map(image => ({ uri: mediaUri(image.src), caption: image.caption })),
-        [images]
-    );
     const [viewerIndex, setViewerIndex] = React.useState<number | null>(null);
 
     // Mention matcher: longest-name-first alternation of the provided
@@ -377,7 +377,7 @@ export const MarkdownText: React.FC<MarkdownTextProps> = ({ content, style, padd
 
     return (
         <View style={[styles.container, { paddingHorizontal: paddingHorizontal ?? 0 }]}>
-            {content.split(/\r\n|\r|\n/).map((line, i) => parseLine(line, i))}
+            {lines.map((line, i) => parseLine(line, i))}
             <ImageViewer
                 visible={viewerIndex !== null}
                 images={viewerImages}

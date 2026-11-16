@@ -4,7 +4,7 @@ import Animated, { Easing, FadeIn, FadeOut } from 'react-native-reanimated';
 import { ThemedView } from '../components/ui/ThemedView';
 import { ThemedText } from '../components/ui/ThemedText';
 import { MarkdownText } from '../components/ui/MarkdownText';
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { PersonRepository } from '../db/repositories/PersonRepository';
 import { EntryRepository } from '../db/repositories/EntryRepository';
 import { Typography } from '../constants/Typography';
@@ -28,6 +28,8 @@ import { useSettings } from '../store/SettingsContext';
 
 const bridgeExtensions = TenTapStartKit.filter(ext => ext.name !== 'placeholder');
 
+const countWords = (text: string) => (text.trim() ? text.trim().split(/\s+/).filter(Boolean).length : 0);
+
 export default function EditorScreen() {
     const { id, type, edit, personId } = useLocalSearchParams();
     const router = useRouter();
@@ -37,6 +39,10 @@ export default function EditorScreen() {
     const isNewEntry = type === 'entry' && id === 'new';
 
     const [content, setContent] = useState('');
+    // Word count while typing. Null means "no live reading yet" — the count
+    // then falls back to the saved content.
+    const [liveWordCount, setLiveWordCount] = useState<number | null>(null);
+    const wordCountTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [title, setTitle] = useState('');
     const [originalContent, setOriginalContent] = useState('');
     const [originalTitle, setOriginalTitle] = useState('');
@@ -101,9 +107,21 @@ export default function EditorScreen() {
         avoidIosKeyboard: true,
         bridgeExtensions,
         onChange: () => {
-            if (isDataLoadedRef.current) {
-                setHasChanges(true);
-            }
+            if (!isDataLoadedRef.current) return;
+            setHasChanges(true);
+            // Live word count: read the text back from the editor so the
+            // counter moves as you type instead of only after a save.
+            // Debounced so a fast typist doesn't spam the bridge.
+            if (wordCountTimer.current) clearTimeout(wordCountTimer.current);
+            wordCountTimer.current = setTimeout(async () => {
+                try {
+                    const text = await editor.getText();
+                    setLiveWordCount(countWords(text || ''));
+                } catch {
+                    // The bridge can time out while the WebView is busy —
+                    // the next keystroke refreshes the count.
+                }
+            }, 250);
         }
     });
 
@@ -111,9 +129,8 @@ export default function EditorScreen() {
         setAlertConfig({ visible: true, title, description, type, onClose });
     };
 
-    const wordCount = useMemo(() => {
-        return content.trim() ? content.trim().split(/\s+/).filter(Boolean).length : 0;
-    }, [content]);
+    // Live count while editing, saved count while reading.
+    const wordCount = liveWordCount ?? countWords(content);
 
     // Leaving edit mode keeps the note open and shows the reader. Only a brand
     // new entry (which has no reader state) pops the screen.
@@ -121,6 +138,7 @@ export default function EditorScreen() {
         Keyboard.dismiss();
         setContent(originalContent);
         setTitle(originalTitle);
+        setLiveWordCount(null);
         setHasChanges(false);
         setEditingTitle(false);
         setImageSelection(null);
@@ -184,11 +202,14 @@ export default function EditorScreen() {
         return () => {
             showListener.remove();
             hideListener.remove();
+            if (wordCountTimer.current) clearTimeout(wordCountTimer.current);
         };
     }, [id, type]);
 
     const loadData = async () => {
         if (!id) return;
+
+        setLiveWordCount(null);
 
         if (isNewEntry) {
             // The note has no database row until the first save. Keep the
@@ -273,6 +294,7 @@ export default function EditorScreen() {
             setContent(markdown);
             setOriginalContent(markdown);
             setOriginalTitle(title.trim() || originalTitle);
+            setLiveWordCount(null);
             // Refresh the editor-boot snapshot to the just-saved document.
             // Without this, re-entering edit mode on the same screen instance
             // boots the WebView with the PRE-save content (the stale-editor

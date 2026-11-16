@@ -85,7 +85,9 @@ function cleanNoteLines(raw?: string) {
     if (!raw) return [];
     return raw
         .split('\n')
-        .map(line => line.trim())
+        // Blank-line spacers are stored as the literal entity "&nbsp;" —
+        // layout, not content.
+        .map(line => line.replace(/&nbsp;|&#160;|\u00a0/g, ' ').trim())
         .filter(line => line.length > 0 && !/^[-*_]{3,}$/.test(line) && !/^\*Added:/.test(line))
         .map(line =>
             line

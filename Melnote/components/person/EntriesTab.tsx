@@ -79,7 +79,10 @@ export function EntriesTab({ entries, onAdd, onDelete, theme, isAcrylic }: Entri
 
         const lines = rawContent
             .split('\n')
-            .map(l => l.trim())
+            // Blank-line spacers are stored as the literal entity "&nbsp;".
+            // They are layout, not content — a note made only of them is
+            // empty, and showing the raw entity as the note title is noise.
+            .map(l => l.replace(/&nbsp;|&#160;|\u00a0/g, ' ').trim())
             .filter(l => l.length > 0 && !/^(-{3,}|\*{3,}|_{3,})$/.test(l));
 
         if (lines.length === 0) return { title: 'Untitled note', body: '' };

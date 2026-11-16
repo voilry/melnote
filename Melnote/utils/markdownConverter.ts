@@ -360,6 +360,10 @@ export function markdownPreviewText(markdown: string): string {
     return (markdown || '')
         .replace(/\r\n?/g, '\n')
         .replace(/!\[[^\]]*\]\([^)]*\)(?:\s*\{[^}]*\})?/g, '[Image]')
+        // Blank-line spacers are stored as the literal entity "&nbsp;".
+        // They are layout, not content — showing the raw entity in a note
+        // card is noise, so it collapses to a space here.
+        .replace(/&nbsp;|&#160;|\u00a0/g, ' ')
         .replace(/\n{3,}/g, '\n\n')
         .trim();
 }
@@ -483,5 +487,14 @@ export function htmlToMarkdown(html: string): string {
     // Normalize multiple consecutive blank lines
     md = md.replace(/\n{3,}/g, '\n\n');
 
-    return md.trim();
+    const trimmed = md.trim();
+    if (!trimmed) return '';
+
+    // A document that is nothing but blank-line spacers has no visible
+    // content. Storing it would save a literal "&nbsp;" as the note body,
+    // which then leaks into the note lists as raw text.
+    const visible = trimmed
+        .replace(/&nbsp;|&#160;|\u00a0/g, '')
+        .replace(/[\s\u200B\uFEFF]/g, '');
+    return visible ? trimmed : '';
 }

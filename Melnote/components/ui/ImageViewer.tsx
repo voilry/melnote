@@ -203,18 +203,26 @@ export function ImageViewer({ visible, images, initialIndex = 0, onClose }: Imag
 
     const [active, setActive] = React.useState(safeInitial);
     const [zoomed, setZoomed] = React.useState(false);
+    // The pager only mounts once the requested index is installed, otherwise
+    // its first painted frame uses the PREVIOUS image (the shared value keeps
+    // its old value) and tapping a later image flashes image 1 first.
+    const [pagerReady, setPagerReady] = React.useState(false);
 
     const index = useSharedValue(safeInitial);
     const dragX = useSharedValue(0);
     const dragY = useSharedValue(0);
 
-    React.useEffect(() => {
-        if (!visible) return;
+    React.useLayoutEffect(() => {
+        if (!visible) {
+            setPagerReady(false);
+            return;
+        }
         index.value = safeInitial;
         dragX.value = 0;
         dragY.value = 0;
         setActive(safeInitial);
         setZoomed(false);
+        setPagerReady(true);
     }, [visible, safeInitial, index, dragX, dragY]);
 
     const close = React.useCallback(() => onClose(), [onClose]);
@@ -283,7 +291,7 @@ export function ImageViewer({ visible, images, initialIndex = 0, onClose }: Imag
                 <View style={styles.root}>
                     <Animated.View style={[StyleSheet.absoluteFill, styles.backdrop, backdropStyle]} />
 
-                    {visible && count > 0 ? (
+                    {pagerReady && count > 0 ? (
                         <GestureDetector gesture={pagerGesture}>
                             <Animated.View
                                 style={[
