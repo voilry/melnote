@@ -29,6 +29,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Input } from '../../../components/ui/Input';
 import { ScalePressable } from '../../../components/ui/ScalePressable';
 import { StatusBar } from 'expo-status-bar';
+import { useFullScreenModal } from '../../../components/ui/useFullScreenModal';
 import { Typography } from '../../../constants/Typography';
 
 const EASE_ENTER = Easing.bezier(0.05, 0.7, 0.1, 1.0);
@@ -75,6 +76,12 @@ export default function RelationsScreen() {
 
     const loadGeneration = useRef(0);
     const isSubmitting = useRef(false);
+
+    // The label screen animates itself away: Android destroys a native
+    // Modal's content the moment `visible` flips, which would leave an empty
+    // white window sliding out instead of the screen.
+    const labelVisible = step === 'label' && !!selectedTarget;
+    const { mounted: labelModalMounted, animatedStyle: labelModalSlideStyle } = useFullScreenModal(labelVisible);
 
     const loadData = async () => {
         const generation = ++loadGeneration.current;
@@ -509,14 +516,13 @@ export default function RelationsScreen() {
 
             {/* ─── Label Modal ─────────────────────────────────────────────── */}
             <Modal
-                visible={step === 'label' && !!selectedTarget}
-                animationType="fade"
-                transparent={false}
-                presentationStyle="fullScreen"
+                visible={labelModalMounted}
+                animationType="none"
+                transparent
                 onRequestClose={resetModal}
                 statusBarTranslucent={true}
             >
-                <View style={[styles.modalContainer, { backgroundColor: colors.background }]}>
+                <Animated.View style={[styles.modalContainer, { backgroundColor: colors.background }, labelModalSlideStyle]}>
                     <StatusBar style="auto" />
                     {selectedTarget && (
                         <Animated.View
@@ -700,7 +706,7 @@ export default function RelationsScreen() {
                             </KeyboardAwareScrollView>
                         </Animated.View>
                     )}
-                </View>
+                </Animated.View>
             </Modal>
         </ThemedView>
     );

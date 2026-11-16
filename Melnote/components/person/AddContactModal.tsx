@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, Modal, TouchableOpacity, Platform, ScrollView } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
-import Animated, { FadeIn, SlideInDown, Easing } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, FadeOut, SlideInDown, FadeOutDown } from 'react-native-reanimated';
+import { useModalPresence } from '../ui/useModalPresence';
 import { ThemedText } from '../ui/ThemedText';
 import { ScalePressable } from '../ui/ScalePressable';
 import { useAppTheme } from '../../hooks/useAppTheme';
@@ -32,6 +33,7 @@ export function AddContactModal({ visible, onClose, onSave, personId }: any) {
 
     const [selectedPlatform, setSelectedPlatform] = useState(PLATFORMS[0]);
     const [value, setValue] = useState('');
+    const { mounted, showContent } = useModalPresence(visible);
 
     useEffect(() => {
         if (visible) {
@@ -47,12 +49,13 @@ export function AddContactModal({ visible, onClose, onSave, personId }: any) {
     };
 
     return (
-        <Modal visible={visible} transparent animationType="none" onRequestClose={onClose} statusBarTranslucent>
+        <Modal visible={mounted} transparent animationType="none" onRequestClose={onClose} statusBarTranslucent>
+            {showContent && (
             <KeyboardAvoidingView
                 behavior="padding"
                 style={styles.modalOverlay}
             >
-                <Animated.View entering={FadeIn.duration(220).easing(EASE_ENTER)} style={StyleSheet.absoluteFill}>
+                <Animated.View entering={FadeIn.duration(220).easing(EASE_ENTER)} exiting={FadeOut.duration(210)} style={StyleSheet.absoluteFill}>
                     <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.5)' }]} />
                 </Animated.View>
 
@@ -60,6 +63,7 @@ export function AddContactModal({ visible, onClose, onSave, personId }: any) {
 
                 <Animated.View
                     entering={SlideInDown.duration(380).easing(EASE_ENTER)}
+                    exiting={FadeOutDown.duration(260).easing(Easing.bezier(0.4, 0, 0.5, 1))}
                     style={[
                         styles.bottomSheet,
                         {
@@ -141,6 +145,7 @@ export function AddContactModal({ visible, onClose, onSave, personId }: any) {
                     />
                 </Animated.View>
             </KeyboardAvoidingView>
+            )}
         </Modal>
     );
 }

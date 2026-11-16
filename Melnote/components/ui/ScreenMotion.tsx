@@ -46,9 +46,10 @@ export function ScreenMotion({
 }: ScreenMotionProps) {
     const reduceMotion = useReducedMotion();
     const animate = enabled && !reduceMotion;
+    const enter = animate && !isTabRoot;
 
-    const scale = useSharedValue(animate && !isTabRoot ? ENTER_SCALE_FROM : 1);
-    const opacity = useSharedValue(animate && !isTabRoot ? 0 : 1);
+    const scale = useSharedValue(enter ? ENTER_SCALE_FROM : 1);
+    const opacity = useSharedValue(enter ? 0 : 1);
 
     const leavingRef = useRef(false);
     const bypassRef = useRef(false);
@@ -57,7 +58,7 @@ export function ScreenMotion({
 
     // Enter Pop-In: the screen expands into place instead of sliding up.
     useEffect(() => {
-        if (!animate || isTabRoot) {
+        if (!enter) {
             scale.value = 1;
             opacity.value = 1;
             return;
@@ -65,7 +66,7 @@ export function ScreenMotion({
 
         scale.value = withTiming(1, { duration: ENTER_DURATION, easing: EASING_ENTER });
         opacity.value = withTiming(1, { duration: ENTER_FADE_DURATION, easing: Easing.out(Easing.quad) });
-    }, [animate, isTabRoot, scale, opacity]);
+    }, [enter, scale, opacity]);
 
     // Re-arrival: make sure a screen that regains focus never stays in a
     // half-finished exit state. Guarded so the first focus event does not cut

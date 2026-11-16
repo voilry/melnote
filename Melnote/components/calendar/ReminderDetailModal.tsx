@@ -6,11 +6,13 @@ import { useAppTheme } from '../../hooks/useAppTheme';
 import { Calendar, Clock, X, CheckCircle, CheckCircleDash, RadioButton, Trash, PencilSimple as Pencil } from '@/components/ui/Icon';
 import { Reminder } from '../../db/repositories/ReminderRepository';
 import { DesignSystem } from '../../constants/DesignSystem';
-import Animated, { FadeIn, SlideInDown, FadeInDown, Easing } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeOut, SlideInDown, FadeOutDown, FadeInDown, Easing } from 'react-native-reanimated';
 import { Avatar } from '../ui/Avatar';
 import { Typography } from '../../constants/Typography';
 import { useRouter } from 'expo-router';
 import { ScalePressable } from '../ui/ScalePressable';
+import { useRef } from 'react';
+import { useModalPresence } from '../ui/useModalPresence';
 
 interface ReminderDetailModalProps {
     visible: boolean;
@@ -21,12 +23,20 @@ interface ReminderDetailModalProps {
     onEdit: (reminder: Reminder) => void;
 }
 
-export function ReminderDetailModal({ visible, reminder, onClose, onToggle, onDelete, onEdit }: ReminderDetailModalProps) {
+export function ReminderDetailModal({ visible, reminder: reminderProp, onClose, onToggle, onDelete, onEdit }: ReminderDetailModalProps) {
     const { colors, hapticsEnabled, theme } = useAppTheme();
     const insets = useSafeAreaInsets();
     const router = useRouter();
 
-    if (!visible || !reminder) return null;
+    // The parent clears its selection the instant the modal closes. Keeping the
+    // last one lets the sheet animate out with its content still rendered.
+    const lastReminderRef = useRef<any>(null);
+    if (reminderProp) lastReminderRef.current = reminderProp;
+    const reminder = reminderProp ?? lastReminderRef.current;
+
+    const { mounted, showContent } = useModalPresence(visible);
+
+    if (!mounted || !reminder) return null;
 
     const parseReminderDate = (dateStr: string) => {
         if (!dateStr) return new Date();
@@ -54,20 +64,23 @@ export function ReminderDetailModal({ visible, reminder, onClose, onToggle, onDe
 
     return (
         <Modal
-            visible={visible}
+            visible={mounted}
             transparent
             animationType="none"
             statusBarTranslucent
             onRequestClose={onClose}
         >
+            {showContent && (
             <View style={styles.modalOverlay}>
                 <Animated.View
                     entering={FadeIn.duration(250).easing(Easing.bezier(0.05, 0.7, 0.1, 1.0))}
+                    exiting={FadeOut.duration(220)}
                     style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.5)' }]}
                 />
                 <Pressable style={styles.modalBackdrop} onPress={onClose}>
                     <Animated.View
                         entering={SlideInDown.duration(320).springify().damping(24).stiffness(240).mass(0.9)}
+                        exiting={FadeOutDown.duration(260).easing(Easing.bezier(0.4, 0, 0.5, 1))}
                         style={[
                             styles.modalContent,
                             { backgroundColor: colors.card, paddingBottom: 100 + insets.bottom + 24 }
@@ -201,6 +214,7 @@ export function ReminderDetailModal({ visible, reminder, onClose, onToggle, onDe
                     </Animated.View>
                 </Pressable>
             </View>
+            )}
         </Modal>
     );
 }

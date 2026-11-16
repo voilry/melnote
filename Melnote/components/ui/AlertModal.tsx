@@ -4,11 +4,12 @@ import { ThemedText } from './ThemedText';
 import { useAppTheme } from '../../hooks/useAppTheme';
 import { DesignSystem } from '../../constants/DesignSystem';
 import { Typography } from '../../constants/Typography';
-import Animated, { FadeIn, SlideInDown } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, FadeOut, SlideInDown, FadeOutDown } from 'react-native-reanimated';
 import { CheckCircle, XCircle, Info, WarningCircle } from '@/components/ui/Icon';
 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ScalePressable } from './ScalePressable';
+import { useModalPresence } from './useModalPresence';
 
 interface AlertModalProps {
     visible: boolean;
@@ -22,8 +23,9 @@ interface AlertModalProps {
 export function AlertModal({ visible, title, description, type = 'info', onClose, buttonLabel = 'Done' }: AlertModalProps) {
     const { colors } = useAppTheme();
     const insets = useSafeAreaInsets();
+    const { mounted, showContent } = useModalPresence(visible);
 
-    if (!visible) return null;
+    if (!mounted) return null;
 
     const Icon = {
         success: <CheckCircle size={44} color={colors.tint} weight="fill" />,
@@ -33,15 +35,18 @@ export function AlertModal({ visible, title, description, type = 'info', onClose
     }[type];
 
     return (
-        <Modal visible={visible} transparent animationType="none" statusBarTranslucent onRequestClose={onClose}>
+        <Modal visible transparent animationType="none" statusBarTranslucent onRequestClose={onClose}>
+            {showContent && (
             <View style={styles.modalOverlay}>
                 <Animated.View
                     entering={FadeIn.duration(250)}
+                    exiting={FadeOut.duration(220)}
                     style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.5)' }]}
                 />
                 <Pressable style={styles.modalBackdrop} onPress={onClose}>
                     <Animated.View
                         entering={SlideInDown.duration(320).springify().damping(24).stiffness(240).mass(0.9)}
+                        exiting={FadeOutDown.duration(260).easing(Easing.bezier(0.4, 0, 0.5, 1))}
                         style={[styles.modalContent, { backgroundColor: colors.card, paddingBottom: 100 + insets.bottom + 28 }]}
                         onStartShouldSetResponder={() => true}
                     >
@@ -62,6 +67,7 @@ export function AlertModal({ visible, title, description, type = 'info', onClose
                     </Animated.View>
                 </Pressable>
             </View>
+            )}
         </Modal>
     );
 }

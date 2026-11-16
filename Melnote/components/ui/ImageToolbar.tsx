@@ -12,11 +12,12 @@ import {
     View,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import Animated, { Easing, FadeIn, SlideInDown, ZoomIn } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, FadeOut, SlideInDown, FadeOutDown, ZoomIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemedText } from './ThemedText';
 import { Icon } from './Icon';
 import { useAppTheme } from '../../hooks/useAppTheme';
+import { useModalPresence } from './useModalPresence';
 import { Typography } from '../../constants/Typography';
 import { deleteMediaRef, editMediaImage, isImageEditingAvailable, mediaRefFromUri, type MediaCropRect, type MediaEditAction } from '../../utils/media';
 import { PhotoSourceSheet } from './PhotoSourceSheet';
@@ -68,6 +69,7 @@ export function ImageToolbar({
     const [captionOpen, setCaptionOpen] = React.useState(false);
     const [captionDraft, setCaptionDraft] = React.useState(selection.caption || '');
     const [editOpen, setEditOpen] = React.useState(false);
+    const editPresence = useModalPresence(editOpen);
     const [replaceOpen, setReplaceOpen] = React.useState(false);
     const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
     const [workingSrc, setWorkingSrc] = React.useState(selection.src);
@@ -358,20 +360,23 @@ export function ImageToolbar({
 
             {/* Image editing sheet */}
             <Modal
-                visible={editOpen}
+                visible={editPresence.mounted}
                 transparent
                 animationType="none"
                 statusBarTranslucent
                 onRequestClose={() => (cropOpen ? closeCrop() : closeEdit())}
             >
+                {editPresence.showContent && (
                 <View style={styles.sheetOverlay}>
                     <Animated.View
                         entering={FadeIn.duration(220).easing(EASE_ENTER)}
+                        exiting={FadeOut.duration(220)}
                         style={[StyleSheet.absoluteFill, styles.dim]}
                     />
                     <Pressable style={styles.sheetBackdrop} onPress={closeEdit}>
                         <Animated.View
                             entering={SHEET_ENTER}
+                            exiting={FadeOutDown.duration(260).easing(Easing.bezier(0.4, 0, 0.5, 1))}
                             style={[
                                 styles.editSheet,
                                 {
@@ -517,7 +522,8 @@ export function ImageToolbar({
                     </View>
                 )}
             </View>
-        </Modal>
+                )}
+            </Modal>
 
             {/* Photo replacement picker sheet */}
             <PhotoSourceSheet

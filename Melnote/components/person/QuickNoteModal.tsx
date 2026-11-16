@@ -22,7 +22,7 @@ import Animated, {
     FadeIn,
     FadeOut,
     SlideInDown,
-    SlideOutDown,
+    FadeOutDown,
     ZoomIn,
     useAnimatedStyle,
     useSharedValue,
@@ -35,6 +35,8 @@ import { Avatar } from '../ui/Avatar';
 import { ScreenHeader } from '../ui/ScreenHeader';
 import { ScalePressable } from '../ui/ScalePressable';
 import { DeleteModal } from '../ui/DeleteModal';
+import { useModalPresence } from '../ui/useModalPresence';
+import { useFullScreenModal } from '../ui/useFullScreenModal';
 import { useAppTheme } from '../../hooks/useAppTheme';
 import { EntryRepository } from '../../db/repositories/EntryRepository';
 import { Typography } from '../../constants/Typography';
@@ -187,6 +189,11 @@ export function QuickNoteModal({ visible, person, onClose, onSave }: QuickNoteMo
     const [usedNotes, setUsedNotes] = useState<string[]>([]);
     const [entryContents, setEntryContents] = useState<Record<string, string>>({});
     const [showSheet, setShowSheet] = useState(false);
+    const sheetPresence = useModalPresence(showSheet);
+    // The screen animates itself away: Android destroys a native Modal's
+    // content the moment `visible` flips, which would leave an empty white
+    // window sliding out instead of this screen.
+    const { mounted: modalMounted, animatedStyle: modalSlideStyle } = useFullScreenModal(visible);
     const [searchQuery, setSearchQuery] = useState('');
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
@@ -197,23 +204,18 @@ export function QuickNoteModal({ visible, person, onClose, onSave }: QuickNoteMo
     const inputRef = useRef<TextInput>(null);
     const sheetScrollRef = useRef<ScrollView>(null);
     const savingRef = useRef(false);
+    const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const keyboardPadding = useSharedValue(Math.max(insets.bottom, 8));
     const sheetHeight = useSharedValue(collapsedSheetHeight);
     const sheetStartHeight = useSharedValue(collapsedSheetHeight);
 
     useEffect(() => {
         if (!visible) {
-            savingRef.current = false;
-            setContent('');
-            setCategory('Note');
-            setSearchQuery('');
+            // Don't wipe the content here: the screen is still on its way out
+            // and an empty screen is exactly what causes the white flash.
+            // Nested sheets are closed so they don't linger over the exit.
             setShowSheet(false);
             setShowDiscard(false);
-            setSaving(false);
-            setSaved(false);
-            setDraftLoaded(false);
-            setUsedNotes([]);
-            setEntryContents({});
             return;
         }
 
@@ -289,6 +291,12 @@ export function QuickNoteModal({ visible, person, onClose, onSave }: QuickNoteMo
             if (focusTimer) clearTimeout(focusTimer);
         };
     }, [visible, person?.id]);
+
+    useEffect(() => {
+        return () => {
+            if (closeTimer.current) clearTimeout(closeTimer.current);
+        };
+    }, []);
 
     useEffect(() => {
         if (!visible || !draftLoaded) return;
@@ -475,7 +483,11 @@ export function QuickNoteModal({ visible, person, onClose, onSave }: QuickNoteMo
         setDraftLoaded(false);
         await clearDraft();
         setShowDiscard(false);
-        onClose();
+        // Let the discard sheet finish sliding out before this screen goes
+        // away. Two native modals tearing down in the same frame is what
+        // made the background flash white.
+        if (closeTimer.current) clearTimeout(closeTimer.current);
+        closeTimer.current = setTimeout(() => onClose(), 320);
     };
 
     const handleSave = async () => {
@@ -502,14 +514,13 @@ export function QuickNoteModal({ visible, person, onClose, onSave }: QuickNoteMo
 
     return (
         <Modal
-            visible={visible}
-            animationType="slide"
-            presentationStyle="fullScreen"
-            transparent={false}
+            visible={modalMounted}
+            animationType="none"
+            transparent
             statusBarTranslucent
             onRequestClose={handleClose}
         >
-            <View style={[styles.container, { backgroundColor: colors.background }]}>
+            <Animated.View style={[styles.container, { backgroundColor: colors.background }, modalSlideStyle]}>
                 <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
 
                 <ScreenHeader
@@ -606,7 +617,7 @@ export function QuickNoteModal({ visible, person, onClose, onSave }: QuickNoteMo
                     </Animated.View>
                 </KeyboardAvoidingView>
 
-                {showSheet ? (
+                {sheetPresence.mounted ? (
                     <Modal
                         visible
                         transparent
@@ -614,10 +625,11 @@ export function QuickNoteModal({ visible, person, onClose, onSave }: QuickNoteMo
                         statusBarTranslucent
                         onRequestClose={closeSheet}
                     >
+                    {sheetPresence.showContent ? (
                     <View style={styles.sheetOverlay}>
                         <Animated.View
                             entering={FadeIn.duration(180)}
-                            exiting={FadeOut.duration(150)}
+                            exiting={FadeOut.duration(210)}
                             style={styles.sheetBackdrop}
                         >
                             <Pressable style={StyleSheet.absoluteFill} onPress={closeSheet} />
@@ -631,7 +643,7 @@ export function QuickNoteModal({ visible, person, onClose, onSave }: QuickNoteMo
                             <View style={styles.sheetAnchor} pointerEvents="box-none">
                                 <Animated.View
                                     entering={SlideInDown.duration(300).springify().damping(24).stiffness(240).mass(0.9)}
-                                    exiting={SlideOutDown.duration(180)}
+                                    exiting={FadeOutDown.duration(260)}
                                     style={[
                                         styles.sheet,
                                         { backgroundColor: colors.card },
@@ -802,6 +814,7 @@ export function QuickNoteModal({ visible, person, onClose, onSave }: QuickNoteMo
                             </View>
                         </KeyboardAvoidingView>
                     </View>
+                    ) : null}
                     </Modal>
                 ) : null}
 
@@ -816,7 +829,7 @@ export function QuickNoteModal({ visible, person, onClose, onSave }: QuickNoteMo
                     onDelete={confirmDiscard}
                     actionLabel="Discard"
                 />
-            </View>
+            </Animated.View>
         </Modal>
     );
 }

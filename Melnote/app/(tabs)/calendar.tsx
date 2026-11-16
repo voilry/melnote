@@ -19,8 +19,9 @@ import { useSettings } from '../../store/SettingsContext';
 import { Avatar } from '../../components/ui/Avatar';
 import * as Haptics from 'expo-haptics';
 import { Modal, Pressable } from 'react-native';
-import Animated, { FadeIn, FadeInRight, FadeInLeft, SlideInDown, useSharedValue, useAnimatedScrollHandler, runOnJS, Easing } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeInRight, FadeInLeft, FadeOut, SlideInDown, FadeOutDown, useSharedValue, useAnimatedScrollHandler, runOnJS, Easing } from 'react-native-reanimated';
 import { DeleteModal } from '../../components/ui/DeleteModal';
+import { useModalPresence } from '../../components/ui/useModalPresence';
 import { ScalePressable } from '../../components/ui/ScalePressable';
 import { Typography } from '../../constants/Typography';
 import { QuickScrollButton } from '../../components/ui/QuickScrollButton';
@@ -88,6 +89,7 @@ export default function CalendarScreen() {
     const [monthDirection, setMonthDirection] = useState<'next' | 'prev'>('next');
     const [selectedDate, setSelectedDate] = useState<Date | null>(null);
     const [showDetailModal, setShowDetailModal] = useState(false);
+    const detailPresence = useModalPresence(showDetailModal);
     const [people, setPeople] = useState<Person[]>([]);
     const [journals, setJournals] = useState<Journal[]>([]);
     const [reminders, setReminders] = useState<Reminder[]>([]);
@@ -616,15 +618,17 @@ export default function CalendarScreen() {
             </Animated.ScrollView>
 
             <Modal
-                visible={showDetailModal}
+                visible={detailPresence.mounted}
                 transparent
                 animationType="none"
                 onRequestClose={() => setShowDetailModal(false)}
                 statusBarTranslucent
             >
+                {detailPresence.showContent && (
                 <View style={styles.modalOverlay}>
                     <Animated.View
                         entering={FadeIn.duration(250).easing(Easing.bezier(0.05, 0.7, 0.1, 1.0))}
+                        exiting={FadeOut.duration(220)}
                         style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.5)' }]}
                     />
                     <Pressable
@@ -633,6 +637,7 @@ export default function CalendarScreen() {
                     >
                         <Animated.View
                             entering={SlideInDown.duration(320).springify().damping(24).stiffness(240).mass(0.9)}
+                            exiting={FadeOutDown.duration(260).easing(Easing.bezier(0.4, 0, 0.5, 1))}
                             style={[styles.modalContent, { backgroundColor: colors.card, paddingBottom: 100 + insets.bottom + 16 }]}
                             onStartShouldSetResponder={() => true}
                         >
@@ -702,9 +707,13 @@ export default function CalendarScreen() {
                                                 style={{ flex: 1 }}
                                                 onPress={() => {
                                                     if (event.type === 'journal') {
+                                                        // Navigating away: drop the sheet at once so its
+                                                        // exit animation cannot play over the new screen.
+                                                        detailPresence.hideNow();
                                                         setShowDetailModal(false);
                                                         router.push(`/journal/${event.id}`);
                                                     } else if (event.type === 'birthday' || event.type === 'met') {
+                                                        detailPresence.hideNow();
                                                         setShowDetailModal(false);
                                                         router.push(`/person/${event.id}`);
                                                     } else if (event.type === 'reminder') {
@@ -771,6 +780,7 @@ export default function CalendarScreen() {
                         </Animated.View>
                     </Pressable>
                 </View>
+                )}
             </Modal>
 
             <AddReminderModal

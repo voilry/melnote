@@ -6,7 +6,7 @@ import {
 import Svg, { Line, Path, Circle, Defs, RadialGradient, Stop } from 'react-native-svg';
 import Animated, {
     useSharedValue, useAnimatedStyle, withTiming, withSpring, withDelay,
-    FadeIn, SlideInDown, SlideOutDown, Easing
+    FadeIn, SlideInDown, FadeOutDown, Easing
 } from 'react-native-reanimated';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import * as Haptics from 'expo-haptics';
@@ -900,7 +900,7 @@ export function SocialWebCanvas({
             {selectedNode && (
                 <Animated.View
                     entering={SlideInDown.duration(220).easing(EASE_ENTER)}
-                    exiting={SlideOutDown.duration(180).easing(EASE_ENTER)}
+                    exiting={FadeOutDown.duration(260).easing(EASE_ENTER)}
                     style={[
                         styles.bottomCard,
                         {

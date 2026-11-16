@@ -1,6 +1,6 @@
 import { View, StyleSheet, FlatList, TouchableOpacity, Modal, TextInput, Platform, ScrollView, Dimensions, Alert, DeviceEventEmitter, Pressable, BackHandler } from 'react-native';
 import { KeyboardAwareScrollView, useKeyboardState } from 'react-native-keyboard-controller';
-import Animated, { FadeInDown, Layout, FadeIn, FadeOut, SlideInDown, SlideOutDown, ZoomIn, useSharedValue, useAnimatedScrollHandler, runOnJS, Easing } from 'react-native-reanimated';
+import Animated, { FadeInDown, Layout, FadeIn, FadeOut, SlideInDown, FadeOutDown, ZoomIn, useSharedValue, useAnimatedScrollHandler, runOnJS, Easing } from 'react-native-reanimated';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
@@ -31,6 +31,8 @@ import * as Haptics from 'expo-haptics';
 import { useAppTheme } from '../../hooks/useAppTheme';
 import { GroupSelector, GroupSelectorHandle } from '../../components/GroupSelector';
 import { ScalePressable } from '../../components/ui/ScalePressable';
+import { useModalPresence } from '../../components/ui/useModalPresence';
+import { useFullScreenModal } from '../../components/ui/useFullScreenModal';
 import { PersonPickerModal } from '../../components/person/PersonPickerModal';
 import { QuickNoteModal } from '../../components/person/QuickNoteModal';
 import { ManageGroupsModal } from '../../components/person/ManageGroupsModal';
@@ -101,6 +103,33 @@ const PersonItem = memo(({ item, index, colors, theme, onPress, onLongPress }: a
 ));
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+// Memory Lane card. Kept as its own component so it can hold a ref for the
+// shared card frame (kept for layout stability, the note opens with the
+// standard screen pop).
+const MemoryLaneCard = memo(({ entry, colors, router }: any) => {
+    return (
+        <ScalePressable
+            style={[styles.highlightCard, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 0 }]}
+            onPress={() => router.push({ pathname: '/journal/[id]', params: { id: entry.id } })}
+        >
+            <View style={styles.highlightHeader}>
+                <View style={[styles.highlightTitleRow, { marginBottom: 4 }]}>
+                    <Book size={14} color={colors.tint} weight="bold" />
+                    <ThemedText type="tiny" style={{ color: colors.tint, fontWeight: '800', marginLeft: 6 }}>
+                        {formatLocalDateShort(entry.date)}
+                    </ThemedText>
+                </View>
+                {entry.title && (
+                    <ThemedText type="defaultSemiBold" numberOfLines={1} style={{ fontSize: 13, marginBottom: 4 }}>{entry.title}</ThemedText>
+                )}
+                <ThemedText type="small" numberOfLines={2} style={{ color: colors.secondary, fontSize: 12, lineHeight: 18 }}>
+                    {markdownPreviewText(entry.content)}
+                </ThemedText>
+            </View>
+        </ScalePressable>
+    );
+});
 
 export default function PeopleScreen() {
     const router = useRouter();
@@ -260,6 +289,12 @@ export default function PeopleScreen() {
 
     const [personToManage, setPersonToManage] = useState<Person | null>(null);
     const [showPersonManageModal, setShowPersonManageModal] = useState(false);
+    const groupAssignPresence = useModalPresence(showGroupAssignModal);
+    const personManagePresence = useModalPresence(showPersonManageModal);
+    // The Add Person screen animates itself away: Android destroys a native
+    // Modal's content the moment `visible` flips, which would leave an empty
+    // white window sliding out instead of the screen.
+    const { mounted: addModalMounted, animatedStyle: addModalSlideStyle } = useFullScreenModal(showAddModal);
 
     const groupSelectorRef = useRef<GroupSelectorHandle>(null);
     const glanceFetchedAt = useRef<number>(0);
@@ -855,26 +890,12 @@ export default function PeopleScreen() {
                                             <View style={[styles.section, { marginBottom: 10 }]}>
                                                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScroll}>
                                                     {highlights.map((h, idx) => (
-                                                        <ScalePressable
+                                                        <MemoryLaneCard
                                                             key={`highlight-${h.id}-${idx}`}
-                                                            style={[styles.highlightCard, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 0 }]}
-                                                            onPress={() => router.push({ pathname: '/journal/[id]', params: { id: h.id } })}
-                                                        >
-                                                            <View style={styles.highlightHeader}>
-                                                                <View style={[styles.highlightTitleRow, { marginBottom: 4 }]}>
-                                                                    <Book size={14} color={colors.tint} weight="bold" />
-                                                                    <ThemedText type="tiny" style={{ color: colors.tint, fontWeight: '800', marginLeft: 6 }}>
-                                                                        {formatLocalDateShort(h.date)}
-                                                                    </ThemedText>
-                                                                </View>
-                                                                {h.title && (
-                                                                    <ThemedText type="defaultSemiBold" numberOfLines={1} style={{ fontSize: 13, marginBottom: 4 }}>{h.title}</ThemedText>
-                                                                )}
-                                                                <ThemedText type="small" numberOfLines={2} style={{ color: colors.secondary, fontSize: 12, lineHeight: 18 }}>
-                                                                    {markdownPreviewText(h.content)}
-                                                                </ThemedText>
-                                                            </View>
-                                                        </ScalePressable>
+                                                            entry={h}
+                                                            colors={colors}
+                                                            router={router}
+                                                        />
                                                     ))}
                                                 </ScrollView>
                                             </View>
@@ -956,14 +977,13 @@ export default function PeopleScreen() {
             />
 
             <Modal
-                visible={showAddModal}
-                animationType="slide"
-                transparent={false}
-                presentationStyle="fullScreen"
+                visible={addModalMounted}
+                animationType="none"
+                transparent
                 statusBarTranslucent={true}
                 onRequestClose={closeAddModal}
             >
-                <View style={[styles.fullScreenPage, { backgroundColor: colors.background }]}>
+                <Animated.View style={[styles.fullScreenPage, { backgroundColor: colors.background }, addModalSlideStyle]}>
                     <StatusBar style="auto" />
                     <View style={[styles.fullScreenHeader, { paddingTop: insets.top + 8, paddingBottom: 12 }]}>
                         <ScalePressable
@@ -1065,7 +1085,7 @@ export default function PeopleScreen() {
                                 </Animated.View>
                             </View>
                     </KeyboardAwareScrollView>
-                </View>
+                </Animated.View>
             </Modal>
             <ManageGroupMembersModal
                 visible={showManageGroupModal}
@@ -1193,10 +1213,12 @@ export default function PeopleScreen() {
             />
 
             {/* Add People to Group Modal */}
-            <Modal visible={showGroupAssignModal} transparent animationType="none" onRequestClose={() => setShowGroupAssignModal(false)} statusBarTranslucent>
+            <Modal visible={groupAssignPresence.mounted} transparent animationType="none" onRequestClose={() => setShowGroupAssignModal(false)} statusBarTranslucent>
+                {groupAssignPresence.showContent && (
                 <View style={styles.modalOverlay}>
                     <Animated.View
                         entering={FadeIn.duration(250).easing(Easing.bezier(0.05, 0.7, 0.1, 1.0))}
+                        exiting={FadeOut.duration(220)}
                         style={StyleSheet.absoluteFill}
                     >
                         <BlurView
@@ -1216,6 +1238,7 @@ export default function PeopleScreen() {
                     >
                         <Animated.View
                             entering={SlideInDown.duration(320).springify().damping(24).stiffness(240).mass(0.9)}
+                            exiting={FadeOutDown.duration(260).easing(Easing.bezier(0.4, 0, 0.5, 1))}
                             style={[styles.bottomSheet, { backgroundColor: colors.card, paddingBottom: 100 + insets.bottom + 24 }]}
                         >
                             <View style={styles.sheetHeader}>
@@ -1275,18 +1298,21 @@ export default function PeopleScreen() {
                         </Animated.View>
                     </TouchableOpacity>
                 </View>
+                )}
             </Modal>
             {/* Person Manage Bottom Sheet */}
             <Modal
-                visible={showPersonManageModal}
+                visible={personManagePresence.mounted}
                 animationType="none"
                 transparent={true}
                 onRequestClose={() => setShowPersonManageModal(false)}
                 statusBarTranslucent
             >
+                {personManagePresence.showContent && (
                 <View style={styles.modalOverlay}>
                     <Animated.View
                         entering={FadeIn.duration(250).easing(Easing.bezier(0.05, 0.7, 0.1, 1.0))}
+                        exiting={FadeOut.duration(220)}
                         style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.5)' }]}
                     />
                     <Pressable
@@ -1295,6 +1321,7 @@ export default function PeopleScreen() {
                     >
                         <Animated.View
                             entering={SlideInDown.duration(320).springify().damping(24).stiffness(240).mass(0.9)}
+                            exiting={FadeOutDown.duration(260).easing(Easing.bezier(0.4, 0, 0.5, 1))}
                             style={[
                                 styles.bottomSheet,
                                 {
@@ -1333,6 +1360,7 @@ export default function PeopleScreen() {
                         </Animated.View>
                     </Pressable>
                 </View>
+                )}
             </Modal>
             <QuickScrollButton
                 isScrolling={isScrolling}

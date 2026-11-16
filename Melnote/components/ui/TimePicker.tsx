@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, Platform, Modal, Pressable, FlatList, DimensionValue, Keyboard, Animated as RNAnimated } from 'react-native';
-import Animated, { SlideInDown, FadeIn } from 'react-native-reanimated';
+import Animated, { Easing, SlideInDown, FadeOutDown, FadeIn, FadeOut } from 'react-native-reanimated';
 import { ThemedText } from './ThemedText';
 import { useAppTheme } from '../../hooks/useAppTheme';
 import { Clock, Check, X } from '@/components/ui/Icon';
 import { BlurView } from 'expo-blur';
 import { DesignSystem } from '../../constants/DesignSystem';
 import { ScalePressable } from './ScalePressable';
+import { useModalPresence } from './useModalPresence';
 import * as Haptics from 'expo-haptics';
 
 interface TimePickerProps {
@@ -161,6 +162,7 @@ function WheelPicker({ items, value, onChange, width }: { items: { label: string
 export function TimePicker({ value, onChange, label, placeholder = 'Select Time' }: TimePickerProps) {
     const { colors, theme, hapticsEnabled } = useAppTheme();
     const [show, setShow] = useState(false);
+    const { mounted, showContent } = useModalPresence(show);
 
     // Parse "HH:MM" 24h into 12h format
     const parseTime = (timeStr: string) => {
@@ -229,9 +231,10 @@ export function TimePicker({ value, onChange, label, placeholder = 'Select Time'
             </ScalePressable>
 
             {Platform.OS === 'ios' || Platform.OS === 'android' ? (
-                <Modal visible={show} transparent animationType="none" statusBarTranslucent onRequestClose={() => setShow(false)}>
+                <Modal visible={mounted} transparent animationType="none" statusBarTranslucent onRequestClose={() => setShow(false)}>
+                    {showContent && (
                     <View style={styles.modalOverlay}>
-                        <Animated.View entering={FadeIn.duration(200)} style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.4)' }]}>
+                        <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(210)} style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.4)' }]}>
                             {Platform.OS === 'ios' && (
                                 <BlurView intensity={20} tint={theme === 'dark' ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
                             )}
@@ -240,6 +243,7 @@ export function TimePicker({ value, onChange, label, placeholder = 'Select Time'
                             <Pressable style={StyleSheet.absoluteFill} onPress={() => setShow(false)} />
                             <Animated.View
                                 entering={SlideInDown.duration(250).springify().damping(20).stiffness(180).mass(0.8)}
+                                exiting={FadeOutDown.duration(260).easing(Easing.bezier(0.4, 0, 0.5, 1))}
                                 style={[styles.pickerContainer, { backgroundColor: colors.card }]}
                             >
                                 <View style={styles.header}>
@@ -280,6 +284,7 @@ export function TimePicker({ value, onChange, label, placeholder = 'Select Time'
                             </Animated.View>
                         </View>
                     </View>
+                    )}
                 </Modal>
             ) : null}
         </View>

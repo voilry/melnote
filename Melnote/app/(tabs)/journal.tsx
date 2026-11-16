@@ -67,7 +67,8 @@ const renderRightActions = (id: number, dragX: RNAnimated.AnimatedInterpolation<
     );
 };
 
-const JournalItem = memo(({ item, index, colors, router, hapticsEnabled, onDelete, shouldAnimate }: any) => (
+const JournalItem = memo(({ item, index, colors, router, hapticsEnabled, onDelete, shouldAnimate }: any) => {
+    return (
     <Animated.View
         entering={shouldAnimate ? FadeInDown.delay(Math.min(index, 5) * 15).duration(260).springify().damping(24).stiffness(280).mass(0.7) : undefined}
         layout={Layout.springify().damping(26).stiffness(280)}
@@ -81,9 +82,7 @@ const JournalItem = memo(({ item, index, colors, router, hapticsEnabled, onDelet
             rightThreshold={60}
         >
             <ScalePressable
-                onPress={() => {
-                    router.push({ pathname: '/journal/[id]', params: { id: item.id } });
-                }}
+                onPress={() => router.push({ pathname: '/journal/[id]', params: { id: item.id } })}
                 style={{ width: '100%' }}
                 innerStyle={{ borderRadius: DesignSystem.radius.lg }}
                 scale={true}
@@ -115,7 +114,8 @@ const JournalItem = memo(({ item, index, colors, router, hapticsEnabled, onDelet
         </ScalePressable>
         </Swipeable>
     </Animated.View>
-));
+    );
+});
 
 export default function JournalScreen() {
     const router = useRouter();

@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, Platform, Modal, Pressable, FlatList, DimensionValue, Keyboard, Animated as RNAnimated } from 'react-native';
-import Animated, { SlideInDown, FadeIn } from 'react-native-reanimated';
+import Animated, { Easing, SlideInDown, FadeOutDown, FadeIn, FadeOut } from 'react-native-reanimated';
 import { ThemedText } from './ThemedText';
 import { useAppTheme } from '../../hooks/useAppTheme';
 import { Calendar, Check } from '@/components/ui/Icon';
 import { BlurView } from 'expo-blur';
 import { DesignSystem } from '../../constants/DesignSystem';
 import { ScalePressable } from './ScalePressable';
+import { useModalPresence } from './useModalPresence';
 import * as Haptics from 'expo-haptics';
 
 interface DatePickerProps {
@@ -182,6 +183,7 @@ function WheelPicker({ items, value, onChange, width }: { items: { label: string
 export function DatePicker({ value, onChange, label, placeholder = 'Select Date', maxDate, minDate }: DatePickerProps) {
     const { colors, theme, hapticsEnabled } = useAppTheme();
     const [show, setShow] = useState(false);
+    const { mounted, showContent } = useModalPresence(show);
 
     const parseLocalDate = (dateStr: string) => {
         if (!dateStr) return new Date();
@@ -267,6 +269,13 @@ export function DatePicker({ value, onChange, label, placeholder = 'Select Date'
         }).filter(d => !d.disabled);
     }, [daysInMonth, minDate, maxDate, tempYear, tempMonth]);
 
+    // Stable wheel identities. These MUST be called unconditionally at the top
+    // level: calling hooks inside JSX breaks the hook order as soon as the
+    // modal body is conditionally rendered (it is, while it animates out).
+    const stableMonths = useStableItems(months);
+    const stableDays = useStableItems(days);
+    const stableYears = useStableItems(years);
+
     // Auto-adjust if selection becomes invalid due to range change
     useEffect(() => {
         if (months.length > 0 && !months.find(m => m.value === tempMonth)) {
@@ -302,9 +311,10 @@ export function DatePicker({ value, onChange, label, placeholder = 'Select Date'
             </ScalePressable>
 
             {Platform.OS === 'ios' || Platform.OS === 'android' ? (
-                <Modal visible={show} transparent animationType="none" statusBarTranslucent onRequestClose={() => setShow(false)}>
+                <Modal visible={mounted} transparent animationType="none" statusBarTranslucent onRequestClose={() => setShow(false)}>
+                    {showContent && (
                     <View style={styles.modalOverlay}>
-                        <Animated.View entering={FadeIn.duration(200)} style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.4)' }]}>
+                        <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(210)} style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.4)' }]}>
                             {Platform.OS === 'ios' && (
                                 <BlurView intensity={20} tint={theme === 'dark' ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
                             )}
@@ -313,6 +323,7 @@ export function DatePicker({ value, onChange, label, placeholder = 'Select Date'
                             <Pressable style={StyleSheet.absoluteFill} onPress={() => setShow(false)} />
                             <Animated.View
                                 entering={SlideInDown.duration(250).springify().damping(20).stiffness(180).mass(0.8)}
+                                exiting={FadeOutDown.duration(260).easing(Easing.bezier(0.4, 0, 0.5, 1))}
                                 style={[styles.pickerContainer, { backgroundColor: colors.card }]}
                             >
                                     <View style={styles.header}>
@@ -342,15 +353,16 @@ export function DatePicker({ value, onChange, label, placeholder = 'Select Date'
                                     </View>
 
                                     <View style={styles.pickerWrapper}>
-                                        <WheelPicker items={useStableItems(months)} value={tempMonth} onChange={setTempMonth} width="35%" />
-                                        <WheelPicker items={useStableItems(days)} value={tempDay} onChange={setTempDay} width="25%" />
-                                        <WheelPicker items={useStableItems(years)} value={tempYear} onChange={setTempYear} width="40%" />
+                                        <WheelPicker items={stableMonths} value={tempMonth} onChange={setTempMonth} width="35%" />
+                                        <WheelPicker items={stableDays} value={tempDay} onChange={setTempDay} width="25%" />
+                                        <WheelPicker items={stableYears} value={tempYear} onChange={setTempYear} width="40%" />
                                         
                                         <View style={[styles.selectionOverlay, { borderColor: colors.border, backgroundColor: colors.tint + '10' }]} pointerEvents="none" />
                                     </View>
                             </Animated.View>
                         </View>
                     </View>
+                    )}
                 </Modal>
             ) : null}
         </View>

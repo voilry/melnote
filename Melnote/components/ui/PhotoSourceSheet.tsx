@@ -8,7 +8,7 @@ import {
     View,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import Animated, { Easing, FadeIn, SlideInDown } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, FadeOut, SlideInDown, FadeOutDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemedText } from './ThemedText';
 import { useAppTheme } from '../../hooks/useAppTheme';
@@ -16,6 +16,7 @@ import { Typography } from '../../constants/Typography';
 import { Camera, PhotoAlbum } from '@/components/ui/Icon';
 import { importPickedImage, type ImportedImage } from '../../utils/media';
 import { ScalePressable } from './ScalePressable';
+import { useModalPresence } from './useModalPresence';
 
 const EASE_ENTER = Easing.bezier(0.05, 0.7, 0.1, 1.0);
 const SHEET_ENTER = SlideInDown.duration(320).springify().damping(24).stiffness(240).mass(0.9);
@@ -38,6 +39,7 @@ export function PhotoSourceSheet({ visible, onClose, onPicked, title }: PhotoSou
     const { colors } = useAppTheme();
     const insets = useSafeAreaInsets();
     const [importing, setImporting] = React.useState(false);
+    const { mounted, showContent } = useModalPresence(visible);
 
     const pick = async (source: 'library' | 'camera') => {
         if (importing) return;
@@ -82,21 +84,24 @@ export function PhotoSourceSheet({ visible, onClose, onPicked, title }: PhotoSou
 
     return (
         <Modal
-            visible={visible}
+            visible={mounted}
             transparent
             animationType="none"
             statusBarTranslucent
             onRequestClose={onClose}
         >
+            {showContent && (
             <View style={styles.overlay}>
                 <Animated.View
                     entering={FadeIn.duration(220).easing(EASE_ENTER)}
+                    exiting={FadeOut.duration(210)}
                     style={[StyleSheet.absoluteFill, styles.dim]}
                     pointerEvents="none"
                 />
                 <Pressable style={styles.backdrop} onPress={onClose}>
                     <Animated.View
                         entering={SHEET_ENTER}
+                        exiting={FadeOutDown.duration(260).easing(Easing.bezier(0.4, 0, 0.5, 1))}
                         style={[
                             styles.sheet,
                             {
@@ -150,6 +155,7 @@ export function PhotoSourceSheet({ visible, onClose, onPicked, title }: PhotoSou
                     </Animated.View>
                 </Pressable>
             </View>
+            )}
         </Modal>
     );
 }

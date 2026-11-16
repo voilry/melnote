@@ -12,6 +12,7 @@ import { useAppTheme } from '../../hooks/useAppTheme';
 import Reanimated, { FadeInDown } from 'react-native-reanimated';
 import { File, Paths } from 'expo-file-system';
 import { DeleteModal } from '../ui/DeleteModal';
+import { useFullScreenModal } from '../ui/useFullScreenModal';
 import { EntryRepository, EntryType } from '../../db/repositories/EntryRepository';
 import { useSettings } from '../../store/SettingsContext';
 import { ScreenHeader } from '../ui/ScreenHeader';
@@ -41,6 +42,11 @@ export function NewEntryModal({ visible, onClose, onSave, personId }: NewEntryMo
     const [searchQuery, setSearchQuery] = useState('');
 
     const fadeAnim = useRef(new RNAnimated.Value(0)).current;
+    // The screen animates itself away: Android destroys a native Modal's
+    // content the moment `visible` flips, which would leave an empty white
+    // window sliding out instead of this screen.
+    const { mounted: modalMounted, animatedStyle: modalSlideStyle } = useFullScreenModal(visible);
+    const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // Draft Logic
     const saveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -52,6 +58,7 @@ export function NewEntryModal({ visible, onClose, onSave, personId }: NewEntryMo
             setCustomCategory('');
             setCustomCategories([]);
             setSearchQuery('');
+            setContent('');
             checkDraft();
             loadCategories();
             RNAnimated.timing(fadeAnim, {
@@ -60,15 +67,17 @@ export function NewEntryModal({ visible, onClose, onSave, personId }: NewEntryMo
                 useNativeDriver: true,
             }).start();
         } else {
+            // Don't wipe the content here: the screen is still on its way out
+            // and an empty screen is exactly what causes the white flash.
             fadeAnim.setValue(0);
-            setCategory('Note');
-            setIsCustom(false);
-            setCustomCategory('');
-            setCustomCategories([]);
-            setContent('');
-            setSearchQuery('');
         }
     }, [visible, personId]);
+
+    useEffect(() => {
+        return () => {
+            if (closeTimer.current) clearTimeout(closeTimer.current);
+        };
+    }, []);
 
     const loadCategories = async () => {
         try {
@@ -166,7 +175,11 @@ export function NewEntryModal({ visible, onClose, onSave, personId }: NewEntryMo
         setContent('');
         setIsCustom(false);
         setShowDiscardModal(false);
-        onClose();
+        // Let the discard sheet finish sliding out before this screen goes
+        // away. Two native modals tearing down in the same frame is what
+        // made the background flash white.
+        if (closeTimer.current) clearTimeout(closeTimer.current);
+        closeTimer.current = setTimeout(() => onClose(), 320);
     };
 
     const selectCategory = (cat: string) => {
@@ -244,14 +257,13 @@ export function NewEntryModal({ visible, onClose, onSave, personId }: NewEntryMo
 
     return (
         <Modal
-            visible={visible}
-            animationType="slide"
-            transparent={false}
-            presentationStyle="fullScreen"
+            visible={modalMounted}
+            animationType="none"
+            transparent
             statusBarTranslucent={true}
             onRequestClose={handleClose}
         >
-            <View style={[styles.container, { backgroundColor: colors.background }]}>
+            <Reanimated.View style={[styles.container, { backgroundColor: colors.background }, modalSlideStyle]}>
                 <StatusBar style="auto" />
                 <ScreenHeader
                     onBack={handleClose}
@@ -373,7 +385,7 @@ export function NewEntryModal({ visible, onClose, onSave, personId }: NewEntryMo
                             />
                         </View>
                 </KeyboardAwareScrollView>
-            </View>
+            </Reanimated.View>
 
             <DeleteModal
                 visible={showDiscardModal}

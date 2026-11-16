@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { memo } from 'react';
 import { View, StyleSheet, TouchableOpacity, Animated as RNAnimated, Platform } from 'react-native';
 import Animated, { FadeInDown, Layout } from 'react-native-reanimated';
 import { ScalePressable } from '../ui/ScalePressable';
@@ -30,6 +30,51 @@ const parseLocalDate = (dateStr: string) => {
     }
     return new Date(dateStr);
 };
+
+// A single journal card.
+const JournalCard = memo(({ item, index, colors, router, isAcrylic, theme, renderRightActions }: any) => {
+    return (
+        <Animated.View
+            layout={Layout.springify().damping(26).stiffness(280)}
+            entering={FadeInDown.delay(Math.min(index, 5) * 20).duration(260).springify().damping(26).stiffness(280).mass(0.7)}
+        >
+            <Swipeable
+                renderRightActions={(_progress: any, dragX: any) => renderRightActions(item.journal.id, dragX)}
+                overshootRight={false}
+                friction={3}
+                overshootFriction={8}
+                rightThreshold={60}
+            >
+                <ScalePressable
+                    onPress={() => router.push(`/journal/${item.journal.id}`)}
+                    style={{ marginBottom: 16 }}
+                    innerStyle={{ borderRadius: 16 }}
+                >
+                    <Card style={[{ borderRadius: 16, backgroundColor: isAcrylic ? (theme === 'dark' ? 'rgba(0,0,0,0.45)' : `${colors.background}80`) : colors.surface, overflow: 'hidden', borderWidth: 0 }]} padding="md">
+                        {isAcrylic && (
+                            <BlurView
+                                intensity={40}
+                                tint={theme === 'dark' ? 'dark' : 'light'}
+                                style={StyleSheet.absoluteFill}
+                            />
+                        )}
+                        <View style={styles.entryHeader}>
+                            <View style={[styles.journalDateBadge, { backgroundColor: colors.tint + '15' }]}>
+                                <ThemedText type="tiny" style={{ color: colors.tint, fontWeight: '800' }}>
+                                    {parseLocalDate(item.journal.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                </ThemedText>
+                            </View>
+                        </View>
+                        {item.journal.title ? (
+                            <ThemedText type="sectionHeader" style={styles.journalTitle}>{item.journal.title}</ThemedText>
+                        ) : null}
+                        <ThemedText style={styles.journalContent} numberOfLines={4}>{markdownPreviewText(item.journal.content)}</ThemedText>
+                    </Card>
+                </ScalePressable>
+            </Swipeable>
+        </Animated.View>
+    );
+});
 
 export function JournalsTab({ journals, personName, onDelete, isAcrylic }: JournalsTabProps) {
     const router = useRouter();
@@ -82,46 +127,16 @@ export function JournalsTab({ journals, personName, onDelete, isAcrylic }: Journ
                 </Animated.View>
             ) : (
                 journals.map((item, index) => (
-                    <Animated.View
+                    <JournalCard
                         key={item.journal.id}
-                        layout={Layout.springify().damping(26).stiffness(280)}
-                        entering={FadeInDown.delay(Math.min(index, 5) * 20).duration(260).springify().damping(26).stiffness(280).mass(0.7)}
-                    >
-                        <Swipeable
-                            renderRightActions={(_progress, dragX) => renderRightActions(item.journal.id, dragX)}
-                            overshootRight={false}
-                            friction={3}
-                            overshootFriction={8}
-                            rightThreshold={60}
-                        >
-                            <ScalePressable
-                                onPress={() => router.push(`/journal/${item.journal.id}`)}
-                                style={{ marginBottom: 16 }}
-                                innerStyle={{ borderRadius: 16 }}
-                            >
-                                <Card style={[{ borderRadius: 16, backgroundColor: isAcrylic ? (theme === 'dark' ? 'rgba(0,0,0,0.45)' : `${colors.background}80`) : colors.surface, overflow: 'hidden', borderWidth: 0 }]} padding="md">
-                                    {isAcrylic && (
-                                        <BlurView
-                                            intensity={40}
-                                            tint={theme === 'dark' ? 'dark' : 'light'}
-                                            style={StyleSheet.absoluteFill}
-                                        />
-                                    )}
-                                    <View style={styles.entryHeader}>
-                                        <View style={[styles.journalDateBadge, { backgroundColor: colors.tint + '15' }]}>
-                                            <ThemedText type="tiny" style={{ color: colors.tint, fontWeight: '800' }}>
-                                                {parseLocalDate(item.journal.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                                            </ThemedText>
-                                        </View>
-                                    </View>
-                                    {item.journal.title ? (
-                                        <ThemedText type="sectionHeader" style={styles.journalTitle}>{item.journal.title}</ThemedText>
-                                    ) : null}
-                                    <ThemedText style={styles.journalContent} numberOfLines={4}>{markdownPreviewText(item.journal.content)}</ThemedText>
-                                </Card>
-                            </ScalePressable>
-                        </Swipeable>
-                    </Animated.View>
+                        item={item}
+                        index={index}
+                        colors={colors}
+                        router={router}
+                        isAcrylic={isAcrylic}
+                        theme={theme}
+                        renderRightActions={renderRightActions}
+                    />
                 ))
             )}
         </View>

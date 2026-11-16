@@ -17,6 +17,7 @@ import { useAppTheme } from '../../hooks/useAppTheme';
 import { useSettings } from '../../store/SettingsContext';
 import Animated, { FadeInDown, ZoomIn } from 'react-native-reanimated';
 import { ScalePressable } from '../ui/ScalePressable';
+import { useFullScreenModal } from '../ui/useFullScreenModal';
 
 interface EditPersonModalProps {
     visible: boolean;
@@ -36,6 +37,10 @@ export function EditPersonModal({ visible, onClose, onSave, person }: EditPerson
     const [firstMet, setFirstMet] = useState(person.firstMet || '');
     const [avatarUri, setAvatarUri] = useState(person.avatarUri || null);
     const savedAvatarRef = useRef<string | null>(person.avatarUri || null);
+    // The screen animates itself away: Android destroys a native Modal's
+    // content the moment `visible` flips, which would leave an empty white
+    // window sliding out instead of this screen.
+    const { mounted: modalMounted, animatedStyle: modalSlideStyle } = useFullScreenModal(visible);
 
     useEffect(() => {
         if (visible) {
@@ -90,14 +95,13 @@ export function EditPersonModal({ visible, onClose, onSave, person }: EditPerson
 
     return (
         <Modal
-            visible={visible}
-            animationType="slide"
-            transparent={false}
-            presentationStyle="fullScreen"
+            visible={modalMounted}
+            animationType="none"
+            transparent
             statusBarTranslucent={true}
             onRequestClose={handleClose}
         >
-            <View style={[styles.container, { backgroundColor: colors.background }]}>
+            <Animated.View style={[styles.container, { backgroundColor: colors.background }, modalSlideStyle]}>
                 <StatusBar style="auto" />
                 <View style={[styles.header, { paddingTop: insets.top + 8, paddingBottom: 12 }]}>
                     <ScalePressable
@@ -165,7 +169,7 @@ export function EditPersonModal({ visible, onClose, onSave, person }: EditPerson
                             </Animated.View>
                         </View>
                 </KeyboardAwareScrollView>
-            </View>
+            </Animated.View>
         </Modal>
     );
 }

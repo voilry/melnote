@@ -6,10 +6,11 @@ import { Typography } from '../../constants/Typography';
 import { useAppTheme } from '../../hooks/useAppTheme';
 import { Check, Folder } from '@/components/ui/Icon';
 import * as Haptics from 'expo-haptics';
-import Animated, { Easing, FadeIn, FadeInDown, SlideInDown } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, FadeInDown, FadeOut, SlideInDown, FadeOutDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Group } from '../../db/repositories/GroupRepository';
 import { getGroupIcon } from '../../constants/GroupIcons';
+import { useModalPresence } from '../ui/useModalPresence';
 
 interface ManageGroupsModalProps {
     visible: boolean;
@@ -25,6 +26,7 @@ const EASE_ENTER = Easing.bezier(0.05, 0.7, 0.1, 1.0);
 export function ManageGroupsModal({ visible, onClose, personName, allGroups, personGroups, onToggleGroup }: ManageGroupsModalProps) {
     const { colors, hapticsEnabled } = useAppTheme();
     const insets = useSafeAreaInsets();
+    const { mounted, showContent } = useModalPresence(visible);
 
     const triggerHaptic = () => {
         if (hapticsEnabled && Platform.OS !== 'web') {
@@ -34,20 +36,23 @@ export function ManageGroupsModal({ visible, onClose, personName, allGroups, per
 
     return (
         <Modal
-            visible={visible}
+            visible={mounted}
             animationType="none"
             transparent={true}
             onRequestClose={onClose}
             statusBarTranslucent
         >
+            {showContent && (
             <View style={styles.modalOverlay}>
                 <Animated.View
                     entering={FadeIn.duration(240).easing(EASE_ENTER)}
+                    exiting={FadeOut.duration(220)}
                     style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.5)' }]}
                 />
                 <Pressable style={{ flex: 1, justifyContent: 'flex-end' }} onPress={onClose}>
                     <Animated.View
                         entering={SlideInDown.duration(360).easing(EASE_ENTER)}
+                        exiting={FadeOutDown.duration(260).easing(Easing.bezier(0.4, 0, 0.5, 1))}
                         onStartShouldSetResponder={() => true}
                         style={[
                             styles.bottomSheet,
@@ -137,6 +142,7 @@ export function ManageGroupsModal({ visible, onClose, personName, allGroups, per
                     </Animated.View>
                 </Pressable>
             </View>
+            )}
         </Modal>
     );
 }

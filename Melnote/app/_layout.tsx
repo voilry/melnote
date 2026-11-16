@@ -213,10 +213,7 @@ function RootLayoutContent() {
             <ScreenMotion
               navigation={navigation}
               isTabRoot={route.name === '(tabs)'}
-              enabled={
-                Platform.OS === 'android' &&
-                route.name !== 'editor'
-              }
+              enabled={Platform.OS === 'android'}
             >
               {children}
             </ScreenMotion>
@@ -246,12 +243,22 @@ function RootLayoutContent() {
           <Stack.Screen name="onboarding" options={{ headerShown: false, animation: Platform.OS === 'android' ? 'none' : 'fade' }} />
           <Stack.Screen
             name="editor"
-            options={{
-              headerShown: false,
-              presentation: 'modal',
-              animation: 'slide_from_bottom',
-              sheetGrabberVisible: true
-            }}
+            options={
+              Platform.OS === 'ios'
+                ? {
+                    headerShown: false,
+                    presentation: 'modal',
+                    animation: 'slide_from_bottom',
+                    sheetGrabberVisible: true,
+                  }
+                : {
+                    // Android: a normal screen, so it uses the app's pop
+                    // animation instead of sliding up from the bottom.
+                    headerShown: false,
+                    presentation: 'card',
+                    animation: 'none',
+                  }
+            }
           />
         </Stack>
       </ThemeProvider>
