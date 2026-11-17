@@ -462,7 +462,7 @@ function BetaStep() {
             <StepHeading
                 title="Melnote is in beta"
                 lead="Expect bugs and issues."
-                body="Thanks for trying it early. If something feels off, let me know."
+                body="Thanks for trying it early. If something feels off, let us know."
             />
 
             <Image
