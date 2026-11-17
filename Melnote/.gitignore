@@ -39,3 +39,10 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# kilo worktree pointer
+.kilo/
+
+# policy docs at repo root
+privacy and policy.md
+terms of service.md
