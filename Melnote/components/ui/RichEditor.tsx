@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PixelRatio, View, StyleSheet, Keyboard } from 'react-native';
 import { RichText, type EditorBridge } from '@10play/tentap-editor';
 import { useAppTheme } from '../../hooks/useAppTheme';
@@ -567,6 +567,21 @@ export const RichEditor: React.FC<RichEditorProps> = ({
                 return null;
             }
 
+            // Last value streamed to RN. Caret moves fire selectionchange
+            // constantly and the result is almost always "no mention", so
+            // identical nulls are not worth a bridge message (RN's setState
+            // would bail out anyway). This cache is written at the post site
+            // only, so it always reflects what RN actually received.
+            //
+            // Two guarantees it must not break:
+            //  - non-null ALWAYS posts, and null after non-null ALWAYS posts,
+            //    so closing a mention can never leave the bar open;
+            //  - a null is re-sent at least once a second anyway. If one bridge
+            //    message were ever dropped, repeated suppression could wedge
+            //    the bar open forever; the heartbeat converges within 1s.
+            var lastMentionPosted;
+            var lastMentionPostedAt = 0;
+
             function detectMention() {
                 if (!JOURNAL) return;
                 var q = null;
@@ -600,6 +615,9 @@ export const RichEditor: React.FC<RichEditorProps> = ({
                         }
                     }
                 } catch (_e) {}
+                if (q === null && lastMentionPosted === null && Date.now() - lastMentionPostedAt < 1000) return;
+                lastMentionPosted = q;
+                lastMentionPostedAt = Date.now();
                 postMsg({ type: 'melnote-mention', value: q });
             }
 
@@ -942,17 +960,44 @@ export const RichEditor: React.FC<RichEditorProps> = ({
             // inline nodes (bold boundary, adjacent text nodes) still yields
             // one contiguous highlight, and multi-word names match no matter
             // how the line is fragmented.
+
+            // Idle gate: every document-derived pass (empty placeholder,
+            // mention paint, divider rendering) is a pure function of the
+            // ProseMirror document, and ProseMirror hands out a NEW doc object
+            // on every transaction. Remembering the last doc processed turns
+            // the 350ms safety-net poll into one querySelector + one property
+            // read while the document is idle (prewarmed journal screens, or
+            // while merely reading), instead of re-walking the whole document.
+            // The mention payload is tracked the same way: names can arrive
+            // after the first paint and that must repaint too.
+            var lastSyncDoc = null;
+            var lastSyncPatterns = null;
+
+            // The alternation is a pure function of the name list, which is
+            // itself a stable array per push, so cache the compiled regex next
+            // to it instead of rebuilding it on every pass.
+            var mentionReCache = null;
+            function mentionRegex(patterns) {
+                if (mentionReCache && mentionReCache.patterns === patterns) {
+                    return mentionReCache.re;
+                }
+                var re = new RegExp('(@(?:' + patterns.join('|') + '))(?=$|[^\\\\w\\\\u2019-])', 'gi');
+                mentionReCache = { patterns: patterns, re: re };
+                return re;
+            }
+
             function syncMentionHighlights() {
                 try {
                     if (!JOURNAL || !window.CSS || !CSS.highlights || typeof Highlight === 'undefined') return;
                     var pm = document.querySelector('.ProseMirror');
                     if (!pm) return;
                     var patterns = window.melnoteMentionEscaped || [];
+                    lastSyncPatterns = window.melnoteMentionEscaped || null;
                     if (!patterns.length || (pm.textContent || '').indexOf('@') === -1) {
                         CSS.highlights.delete('melnote-mention');
                         return;
                     }
-                    var re = new RegExp('(@(?:' + patterns.join('|') + '))(?=$|[^\\\\w\\\\u2019-])', 'gi');
+                    var re = mentionRegex(patterns);
                     var ranges = [];
 
                     function pushRange(nodes, start, end) {
@@ -1015,15 +1060,26 @@ export const RichEditor: React.FC<RichEditorProps> = ({
                 } catch (_e) {}
             }
 
-            function syncAll() {
+            function syncAll(force) {
                 var pm = document.querySelector('.ProseMirror');
                 if (!pm) return;
-                syncDocEmpty(pm);
-                syncMentionHighlights();
+                // doc is null only while ProseMirror is still booting — run
+                // every pass then, and don't record it, so the first real
+                // document is treated as a change.
+                var doc = (pm.editor && pm.editor.state) ? pm.editor.state.doc : null;
+                var patterns = window.melnoteMentionEscaped || null;
+                var docChanged = force ? true : (doc ? doc !== lastSyncDoc : true);
+                var patternsChanged = patterns !== lastSyncPatterns;
+                if (doc) lastSyncDoc = doc;
+                if (docChanged || patternsChanged) {
+                    lastSyncPatterns = patterns;
+                    syncDocEmpty(pm);
+                    syncMentionHighlights();
+                }
                 if (!JOURNAL) return;
                 ensureDate(pm);
                 ensureTitle(pm);
-                syncDividers(pm);
+                if (docChanged) syncDividers(pm);
                 // Boot focus for brand-new journals: take the caret only while
                 // nothing else has been focused yet, and only while the title
                 // is empty.
@@ -1037,13 +1093,24 @@ export const RichEditor: React.FC<RichEditorProps> = ({
                 }
             }
 
+            // force is set by the MutationObserver: an actual DOM change is
+            // always worth a pass, even if the ProseMirror doc object happens
+            // to be identical (IME composition writes the DOM before the
+            // transaction commits; anything else that rewrites text nodes
+            // behind ProseMirror's back would otherwise stay stale until the
+            // next edit). The 350ms timer is the only caller that goes through
+            // the doc-identity gate.
             var scheduled = false;
-            function scheduleSync() {
+            var scheduledForced = false;
+            function scheduleSync(force) {
+                if (force) scheduledForced = true;
                 if (scheduled) return;
                 scheduled = true;
                 requestAnimationFrame(function () {
                     scheduled = false;
-                    syncAll();
+                    var forced = scheduledForced;
+                    scheduledForced = false;
+                    syncAll(forced);
                 });
             }
 
@@ -1056,8 +1123,8 @@ export const RichEditor: React.FC<RichEditorProps> = ({
                         var p = document.querySelector('.ProseMirror');
                         if (p) {
                             obs.disconnect();
-                            scheduleSync();
-                            new MutationObserver(scheduleSync).observe(p, {
+                            scheduleSync(true);
+                            new MutationObserver(function () { scheduleSync(true); }).observe(p, {
                                 childList: true,
                                 subtree: true,
                                 characterData: true
@@ -1083,15 +1150,32 @@ export const RichEditor: React.FC<RichEditorProps> = ({
                 setTimeout(syncAll, 2000);
             }
 
+            // Exposed so the native side can repaint the moment it streams a
+            // fresh name list (instant, instead of waiting for the 350ms net).
+            window.melnoteSyncMentions = syncMentionHighlights;
+
             attach();
             scheduleSync();
+
+            // Pages start with an empty JS context: every global the native
+            // side injected before navigation is gone. So the page asks for
+            // the @mention payload once it is actually running. The reply
+            // carries whatever the connection list looks like at ready time,
+            // which a document-start injection cannot know (the list is loaded
+            // asynchronously and can still be empty while the page boots).
+            postMsg({ type: 'melnote-ready' });
         })();
     `;
 
     // Bridges our custom header messages out of the RichText webview without
     // disturbing TenTap's own messaging (exclusivelyUseCustomOnMessage=false
     // lets both handlers receive every message).
+    //
+    // mentionPushRef lets the page's readiness handshake (`melnote-ready`) pull
+    // the current @mention payload without this handler depending on callbacks
+    // that are declared further down.
     type WebviewMessageLike = { nativeEvent: { data?: unknown } };
+    const mentionPushRef = useRef<() => void>(() => {});
     const handleWebviewMessage = useCallback((event: WebviewMessageLike) => {
         const data = event?.nativeEvent?.data;
         if (typeof data !== 'string' || data.charCodeAt(0) !== 0x7b /* '{' */) return;
@@ -1103,6 +1187,9 @@ export const RichEditor: React.FC<RichEditorProps> = ({
                 onTitleFocusChange(msg.value === true);
             } else if (msg.type === 'melnote-mention' && onMentionQuery) {
                 onMentionQuery(typeof msg.value === 'string' ? msg.value : null);
+            } else if (msg.type === 'melnote-ready') {
+                // Page booted (or reloaded) and wiped its globals: re-seed.
+                mentionPushRef.current();
             } else if (msg.type === 'melnote-image-selection' && onImageSelectionChange) {
                 const sel = imageSelectionFromMessage(msg.value);
                 if (sel?.active) {
@@ -1122,16 +1209,42 @@ export const RichEditor: React.FC<RichEditorProps> = ({
     // regex-escaped RN-side (the injected script is a template literal, so the
     // escaping itself must not live there). The RAW names are streamed too so
     // the caret-side matcher can recognise multi-word prefixes.
+    //
+    // The payload is cached in a ref and pushed from three places: when the
+    // name list changes (live updates), on the page's ready handshake (every
+    // load, latest list), and on handleLoad. The last one is deliberately
+    // redundant: it is driven by the native load event, so it still lands when
+    // the ready message is dropped or the custom onMessage channel is not
+    // wired for a given journal usage. Pushing only on the list change was the
+    // original bug — the first push usually landed BEFORE the webview
+    // navigated, the navigation wiped these globals, and nothing re-sent them.
+    // That is what made @mentions paint in the theme colour only "sometimes"
+    // (dev vs release boot timing).
     const mentionNamesKey = (mentionNames || []).join('\u0001');
-    useEffect(() => {
-        if (!editor || !journalMeta) return;
+    const mentionPayload = useMemo(() => {
         const list = mentionNamesKey ? mentionNamesKey.split('\u0001') : [];
-        const escaped = escapedMentionPatterns(list);
+        return { escaped: escapedMentionPatterns(list), names: list };
+    }, [mentionNamesKey]);
+    const mentionPayloadRef = useRef(mentionPayload);
+    mentionPayloadRef.current = mentionPayload;
+
+    const pushMentionNames = useCallback(() => {
+        if (!editor || !journalMeta) return;
+        const { escaped, names } = mentionPayloadRef.current;
         editor.webviewRef.current?.injectJavaScript(
             `window.melnoteMentionEscaped = ${JSON.stringify(escaped)};` +
-            `window.melnoteMentionNames = ${JSON.stringify(list)};true;`
+            `window.melnoteMentionNames = ${JSON.stringify(names)};` +
+            // Repaint immediately when the page helper exists. On the very
+            // first load this is a no-op (enhanceJS has not booted yet) and
+            // its own boot sync paints instead.
+            `if (window.melnoteSyncMentions) window.melnoteSyncMentions();true;`
         );
-    }, [editor, journalMeta, mentionNamesKey]);
+    }, [editor, journalMeta]);
+    mentionPushRef.current = pushMentionNames;
+
+    useEffect(() => {
+        pushMentionNames();
+    }, [pushMentionNames, mentionPayload]);
 
     // Prewarm support (journal): on every sessionToken bump, push the latest
     // title INTO the already-mounted webview. The injected title div is built
@@ -1280,13 +1393,20 @@ export const RichEditor: React.FC<RichEditorProps> = ({
     const handleLoad = useCallback(() => {
         if (!editor) return;
         editor.injectCSS(resolvedCSS, 'melnote-theme');
+        // Re-seed the @mention payload BEFORE enhanceJS boots. The page just
+        // navigated (a fresh load or iOS's second navigation), so anything the
+        // mount effect pushed lives in the previous document and is gone.
+        // Intentionally redundant with the page's `melnote-ready` handshake:
+        // this path is a native load callback, so it does not depend on the
+        // JS -> native message channel being wired or delivering.
+        pushMentionNames();
         editor.injectJS(enhanceJS);
         // Selection, corner-handle resize, alignment painting and block
         // drag-and-drop all need ProseMirror geometry, so they live in the
         // page. The script is idempotent and retries until the view exists.
         editor.injectJS(IMAGE_TOOLS_JS);
         syncExpectedDoc();
-    }, [editor, resolvedCSS, enhanceJS, syncExpectedDoc]);
+    }, [editor, resolvedCSS, enhanceJS, pushMentionNames, syncExpectedDoc]);
 
     return (
         <View
