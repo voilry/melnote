@@ -19,20 +19,29 @@ const BAR_HEIGHT = 56;
 const ADD_BUTTON_SIZE = 46; // <-- Change this to adjust the + button size
 const GAP_BETWEEN_NAV_AND_BUTTON = 4; // <-- Change this to adjust the distance between navigation and + button
 
+// When Calendar AND Journal are both turned off there is only one tab left, so
+// the capsule navigation makes no sense (a lone icon in a wide pill). The +
+// button then becomes a regular floating action button anchored to the
+// bottom-right corner, the way it works in most apps.
+const SOLO_FAB_SIZE = 52;
+const SOLO_FAB_MARGIN = 20;
+const SOLO_MENU_WIDTH = 280;
+const SOLO_MENU_BOTTOM = 96;
+
 const ICONS: Record<string, any> = {
     index: UsersTwo,
     calendar: Calendar,
     journal: BookOpen,
 };
 
-function MenuOption({ icon, title, onPress, index = 0 }: any) {
+function MenuOption({ icon, title, onPress, index = 0, spacious = false }: any) {
     return (
         <Animated.View
             entering={FadeInLeft.delay(70 + index * 22).duration(280).springify().damping(22).stiffness(210).mass(0.8)}
-            style={{ paddingVertical: 6 }}
+            style={{ paddingVertical: spacious ? 4 : 6 }}
         >
             <ScalePressable
-                style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 16, borderRadius: 14 }}
+                style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: spacious ? 22 : 16, paddingHorizontal: 16, borderRadius: 14 }}
                 onPress={onPress}
                 innerStyle={{ borderRadius: 14 }}
                 scaleTo={0.96}
@@ -121,6 +130,23 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
 
     const currentBarWidth = visibleRoutes.length === 3 ? 180 : (visibleRoutes.length === 2 ? 130 : 80);
 
+    // Only one tab left -> no navigation capsule at all, just the + FAB.
+    const isSolo = visibleRoutes.length === 1;
+    const fabSize = isSolo ? SOLO_FAB_SIZE : ADD_BUTTON_SIZE;
+
+    // Hiding the tab you are currently standing on (both toggles live in
+    // Settings) would otherwise leave an unreachable screen behind — there is
+    // no bar left to navigate out of it. Fall back to the first visible tab.
+    useEffect(() => {
+        const focused = state.routes[state.index];
+        if (!focused) return;
+        const focusedVisible = visibleRoutes.some((route: any) => route.key === focused.key);
+        if (!focusedVisible && visibleRoutes[0]) {
+            navigation.navigate({ name: visibleRoutes[0].name, merge: true });
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [state.index, state.routes, visibleRoutes.length, settings.showCalendarTab, settings.showJournalTab]);
+
     const barBg = theme === 'dark' ? (colors.background === '#000000' ? '#121110' : '#181818') : colors.background;
 
     const handleAction = (action: string) => {
@@ -158,7 +184,8 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
             bottom: 23,
             left: 0,
             right: 0,
-            alignItems: 'center', // centers the capsule
+            // Solo mode has no capsule, so the + button hugs the right edge.
+            alignItems: isSolo ? 'flex-end' : 'center',
             pointerEvents: 'box-none',
             zIndex: 10,
         }}>
@@ -179,29 +206,43 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
                     <Animated.View
                         entering={FadeInUp.duration(320).springify().damping(22).stiffness(190).mass(0.9)}
                         exiting={FadeOutDown.duration(200).easing(Easing.bezier(0.3, 0.0, 0.8, 0.15))}
-                        style={{ position: 'absolute', bottom: 100, left: 20, right: 20, alignItems: 'center', pointerEvents: 'box-none' }}
+                        style={
+                            isSolo
+                                // Anchored to the FAB, right-aligned above it.
+                                ? { position: 'absolute', right: SOLO_FAB_MARGIN, bottom: SOLO_MENU_BOTTOM, alignItems: 'flex-end', pointerEvents: 'box-none' }
+                                : { position: 'absolute', bottom: 100, left: 20, right: 20, alignItems: 'center', pointerEvents: 'box-none' }
+                        }
                     >
-                        <View style={{ width: '100%', maxWidth: 300, backgroundColor: colors.card, borderRadius: 28, padding: 8, borderColor: colors.border, borderWidth: 0, ...DesignSystem.shadows.xl }}>
+                        <View style={{
+                            width: isSolo ? SOLO_MENU_WIDTH : '100%',
+                            maxWidth: 300,
+                            backgroundColor: colors.card,
+                            borderRadius: 28,
+                            padding: isSolo ? 10 : 8,
+                            borderColor: colors.border,
+                            borderWidth: 0,
+                            ...DesignSystem.shadows.xl,
+                        }}>
 
-                            <MenuOption icon={<UserIcon size={22} color={colors.tint} weight="fill" />} title="New Person" onPress={() => handleAction('newPerson')} index={0} />
+                            <MenuOption spacious={isSolo} icon={<UserIcon size={22} color={colors.tint} weight="fill" />} title="New Person" onPress={() => handleAction('newPerson')} index={0} />
                             <View style={{ height: 1, backgroundColor: colors.border, marginHorizontal: 16 }} />
 
-                            <MenuOption icon={<PenLine size={22} color="#6366f1" weight="fill" />} title="Quick Note" onPress={() => handleAction('quickNote')} index={1} />
+                            <MenuOption spacious={isSolo} icon={<PenLine size={22} color="#6366f1" weight="fill" />} title="Quick Note" onPress={() => handleAction('quickNote')} index={1} />
                             <View style={{ height: 1, backgroundColor: colors.border, marginHorizontal: 16 }} />
 
-                            <MenuOption icon={<AddressBook size={22} color="#f59e0b" weight="fill" />} title="Quick Contact" onPress={() => handleAction('quickContact')} index={2} />
+                            <MenuOption spacious={isSolo} icon={<AddressBook size={22} color="#f59e0b" weight="fill" />} title="Quick Contact" onPress={() => handleAction('quickContact')} index={2} />
 
                             {settings.showCalendarTab && (
                                 <>
                                     <View style={{ height: 1, backgroundColor: colors.border, marginHorizontal: 16 }} />
-                                    <MenuOption icon={<Bell size={22} color="#ef4444" weight="fill" />} title="Set Reminder" onPress={() => handleAction('setReminder')} index={3} />
+                                    <MenuOption spacious={isSolo} icon={<Bell size={22} color="#ef4444" weight="fill" />} title="Set Reminder" onPress={() => handleAction('setReminder')} index={3} />
                                 </>
                             )}
 
                             {settings.showJournalTab && (
                                 <>
                                     <View style={{ height: 1, backgroundColor: colors.border, marginHorizontal: 16, opacity: theme === 'dark' ? 0.6 : 1.0 }} />
-                                    <MenuOption icon={<Book size={22} color="#10b981" weight="fill" />} title="Quick Journal" onPress={() => handleAction('quickJournal')} index={4} />
+                                    <MenuOption spacious={isSolo} icon={<Book size={22} color="#10b981" weight="fill" />} title="Quick Journal" onPress={() => handleAction('quickJournal')} index={4} />
                                 </>
                             )}
 
@@ -211,71 +252,73 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
             )}
 
             {/* Nav Pill and Detached Button */}
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: GAP_BETWEEN_NAV_AND_BUTTON, pointerEvents: 'box-none' }}>
-                <View style={{
-                    flexDirection: 'row',
-                    height: BAR_HEIGHT,
-                    width: currentBarWidth,
-                    borderRadius: BAR_HEIGHT / 2,
-                    backgroundColor: barBg,
-                    borderWidth: theme === 'dark' ? 0 : 1,
-                    borderColor: colors.border,
-                    alignItems: 'center',
-                    position: 'relative',
-                }}>
-                    {/* Material 3 Expressive Sliding Active Tab Indicator */}
-                    {activeRouteIndex >= 0 && (
-                        <Animated.View
-                            style={[
-                                {
-                                    position: 'absolute',
-                                    top: (BAR_HEIGHT - 44) / 2,
-                                    left: 0,
-                                    width: 44,
-                                    height: 44,
-                                    borderRadius: 22,
-                                    backgroundColor: colors.tint + '25',
-                                },
-                                activeIndicatorStyle
-                            ]}
-                            pointerEvents="none"
-                        />
-                    )}
-
-                    {visibleRoutes.map((route: any) => {
-                        const isFocused = state.routes[state.index]?.name === route.name;
-                        const Icon = ICONS[route.name];
-
-                        const activeColor = colors.tint;
-                        const inactiveColor = theme === 'dark' ? 'rgba(255,255,255,0.38)' : colors.tabIconDefault;
-
-                        const onPress = () => {
-                            if (hapticsEnabled && Platform.OS !== 'web') {
-                                Haptics.selectionAsync();
-                            }
-                            const event = navigation.emit({
-                                type: 'tabPress',
-                                target: route.key,
-                                canPreventDefault: true,
-                            });
-                            if (!isFocused && !event.defaultPrevented) {
-                                navigation.navigate({ name: route.name, merge: true });
-                            }
-                        };
-
-                        return (
-                            <TabButton
-                                key={route.key}
-                                route={route}
-                                isFocused={isFocused}
-                                Icon={Icon}
-                                activeColor={activeColor}
-                                inactiveColor={inactiveColor}
-                                onPress={onPress}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: GAP_BETWEEN_NAV_AND_BUTTON, pointerEvents: 'box-none', marginRight: isSolo ? SOLO_FAB_MARGIN : 0 }}>
+                {!isSolo && (
+                    <View style={{
+                        flexDirection: 'row',
+                        height: BAR_HEIGHT,
+                        width: currentBarWidth,
+                        borderRadius: BAR_HEIGHT / 2,
+                        backgroundColor: barBg,
+                        borderWidth: theme === 'dark' ? 0 : 1,
+                        borderColor: colors.border,
+                        alignItems: 'center',
+                        position: 'relative',
+                    }}>
+                        {/* Material 3 Expressive Sliding Active Tab Indicator */}
+                        {activeRouteIndex >= 0 && (
+                            <Animated.View
+                                style={[
+                                    {
+                                        position: 'absolute',
+                                        top: (BAR_HEIGHT - 44) / 2,
+                                        left: 0,
+                                        width: 44,
+                                        height: 44,
+                                        borderRadius: 22,
+                                        backgroundColor: colors.tint + '25',
+                                    },
+                                    activeIndicatorStyle
+                                ]}
+                                pointerEvents="none"
                             />
-                        );
-                    })}
-                </View>
+                        )}
+
+                        {visibleRoutes.map((route: any) => {
+                            const isFocused = state.routes[state.index]?.name === route.name;
+                            const Icon = ICONS[route.name];
+
+                            const activeColor = colors.tint;
+                            const inactiveColor = theme === 'dark' ? 'rgba(255,255,255,0.38)' : colors.tabIconDefault;
+
+                            const onPress = () => {
+                                if (hapticsEnabled && Platform.OS !== 'web') {
+                                    Haptics.selectionAsync();
+                                }
+                                const event = navigation.emit({
+                                    type: 'tabPress',
+                                    target: route.key,
+                                    canPreventDefault: true,
+                                });
+                                if (!isFocused && !event.defaultPrevented) {
+                                    navigation.navigate({ name: route.name, merge: true });
+                                }
+                            };
+
+                            return (
+                                <TabButton
+                                    key={route.key}
+                                    route={route}
+                                    isFocused={isFocused}
+                                    Icon={Icon}
+                                    activeColor={activeColor}
+                                    inactiveColor={inactiveColor}
+                                    onPress={onPress}
+                                />
+                            );
+                        })}
+                    </View>
+                )}
 
                 {/* Detached Add Button - Combined solid background with ScalePressable to fix scaling and transparency */}
                 <ScalePressable
@@ -284,15 +327,15 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
                     }}
                     scaleTo={0.88}
                     style={{
-                        width: ADD_BUTTON_SIZE,
-                        height: ADD_BUTTON_SIZE,
-                        borderRadius: ADD_BUTTON_SIZE / 2,
+                        width: fabSize,
+                        height: fabSize,
+                        borderRadius: fabSize / 2,
                         backgroundColor: barBg,
                         justifyContent: 'center',
                         alignItems: 'center',
                         overflow: 'hidden',
                     }}
-                    innerStyle={{ borderRadius: ADD_BUTTON_SIZE / 2 }}
+                    innerStyle={{ borderRadius: fabSize / 2 }}
                     hapticStyle={Haptics.ImpactFeedbackStyle.Medium}
                 >
                     {/* The Tint Overlay - This is the "design" part */}
@@ -303,7 +346,7 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
                         alignItems: 'center',
                     }}>
                         <Animated.View style={plusIconStyle}>
-                            <Plus size={ADD_BUTTON_SIZE * 0.45} color={showAddMenu ? (theme === 'dark' ? '#000' : '#fff') : colors.tint} weight="bold" />
+                            <Plus size={fabSize * 0.45} color={showAddMenu ? (theme === 'dark' ? '#000' : '#fff') : colors.tint} weight="bold" />
                         </Animated.View>
                     </View>
                 </ScalePressable>
