@@ -1,9 +1,17 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { View, ScrollView, Text as RNText, StyleSheet } from 'react-native';
 import { ThemedText } from './ThemedText';
 import { Avatar } from './Avatar';
 import { ScalePressable } from './ScalePressable';
 import { useAppTheme } from '../../hooks/useAppTheme';
+
+/**
+ * Picking a chip closes the bar (the caret's @query goes away), so the chip
+ * used to unmount inside the same press it started: the press-in scale and the
+ * overlay never had a frame to appear, which read as "no tap feedback". Hold
+ * the pick just past the press animation so the chip visibly reacts.
+ */
+const PICK_DELAY_MS = 110;
 
 export interface MentionPerson {
     id: number;
@@ -43,24 +51,44 @@ export function MentionSuggestionBar({ query, persons, topPersons, onPick }: Men
         : (topPersons || []).slice()
     ).slice(0, 6);
 
+    // Deferred single-shot pick. The timer is cleared if the bar closes (the
+    // user deletes the '@') before it fires, so a queued pick can never insert
+    // a mention into a caret that no longer has one.
+    const pickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    useEffect(() => () => {
+        if (pickTimerRef.current) clearTimeout(pickTimerRef.current);
+    }, []);
+
+    const handlePick = (person: MentionPerson) => {
+        // Ignore extra taps while the press animation is playing.
+        if (pickTimerRef.current) return;
+        pickTimerRef.current = setTimeout(() => {
+            pickTimerRef.current = null;
+            onPick(person);
+        }, PICK_DELAY_MS);
+    };
+
     if (matches.length === 0) return null;
 
     return (
         <View style={[styles.bar, { backgroundColor: colors.background, borderTopColor: colors.border + '30' }]}>
+            <ThemedText type="tiny" style={[styles.hint, { color: colors.secondary }]}>@mention</ThemedText>
             <ScrollView horizontal keyboardShouldPersistTaps="handled" showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
                 {matches.map(p => (
                     <ScalePressable
                         key={p.id}
-                        onPress={() => onPick(p)}
+                        onPress={() => handlePick(p)}
+                        scaleTo={0.94}
                         style={[styles.chip, { backgroundColor: colors.surface }]}
                         innerStyle={{ borderRadius: 16 }}
+                        accessibilityLabel={`Mention ${p.name}`}
+                        accessibilityRole="button"
                     >
                         <Avatar name={p.name} uri={p.avatarUri} size={24} />
                         <RNText numberOfLines={1} style={[styles.chipText, { color: colors.text }]}>{p.name}</RNText>
                     </ScalePressable>
                 ))}
             </ScrollView>
-            <ThemedText type="tiny" style={[styles.hint, { color: colors.secondary }]}>@mention</ThemedText>
         </View>
     );
 }
@@ -92,7 +120,7 @@ const styles = StyleSheet.create({
         fontWeight: '600',
     },
     hint: {
-        marginTop: 2,
+        marginBottom: 6,
         marginLeft: 2,
         opacity: 0.6,
     },

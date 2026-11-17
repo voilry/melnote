@@ -178,6 +178,7 @@ export const Smile = Smiley;
 export const Music = MusicNote;
 export const Github = (props: any) => <Icon name={props.weight === 'fill' ? 'github_fill' : 'github_line'} {...props} />;
 export const GithubLogo = Github;
+export const Bug = (props: any) => <Icon name={props.weight === 'fill' ? 'bug_fill' : 'bug_line'} {...props} />;
 export const Link = (props: any) => <Icon name={props.weight === 'fill' ? 'link_fill' : 'link_line'} {...props} />;
 export const MoreVertical = DotsThreeVertical;
 export const ShareIcon = ShareNetwork;

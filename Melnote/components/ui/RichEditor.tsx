@@ -5,6 +5,7 @@ import { useAppTheme } from '../../hooks/useAppTheme';
 import { escapedMentionPatterns } from '../../utils/mentions';
 import { IMAGE_TOOLS_JS } from './imageToolsScript';
 import { imageSelectionFromMessage, type ImageSelection } from '../../utils/imageSelection';
+import { logError } from '../../utils/errorLog';
 
 interface RichEditorProps {
     editor: EditorBridge;
@@ -429,6 +430,47 @@ export const RichEditor: React.FC<RichEditorProps> = ({
                         window.ReactNativeWebView.postMessage(JSON.stringify(payload));
                     }
                 } catch (_e) {}
+            }
+
+            // The editor page runs in its own JS context, so an uncaught error
+            // here is invisible to the app: React Native's global handler and
+            // console.error hook never see it. The page forwards those errors
+            // to the app, which writes them to the on-device error log.
+            // Only uncaught errors and unhandled rejections are forwarded --
+            // page console output is far too noisy to log.
+            if (!window.__melnoteErrorForwarding) {
+                window.__melnoteErrorForwarding = true;
+
+                function forwardPageError(text) {
+                    try {
+                        var value = String(text == null ? '' : text);
+                        if (!value) value = 'Unknown page error';
+                        postMsg({ type: 'melnote-page-error', value: value.slice(0, 300) });
+                    } catch (_e) {}
+                }
+
+                // No capture phase on purpose: this only receives uncaught JS
+                // exceptions, not failed resource loads (images, scripts).
+                window.addEventListener('error', function (event) {
+                    try {
+                        var error = event && event.error;
+                        var message = event && event.message
+                            ? event.message
+                            : (error && error.message ? error.message : 'Unknown page error');
+                        var line = event && event.lineno ? ' (line ' + event.lineno + ')' : '';
+                        forwardPageError(message + line);
+                    } catch (_e) {}
+                });
+
+                window.addEventListener('unhandledrejection', function (event) {
+                    try {
+                        var reason = event && event.reason;
+                        var message = reason && reason.message
+                            ? reason.message
+                            : String(reason == null ? 'Unhandled promise rejection' : reason);
+                        forwardPageError(message);
+                    } catch (_e) {}
+                });
             }
 
             window.melnoteSetContent = function (html) {
@@ -1198,6 +1240,9 @@ export const RichEditor: React.FC<RichEditorProps> = ({
                 onImageSelectionChange(sel);
             } else if (msg.type === 'melnote-dismiss-keyboard') {
                 Keyboard.dismiss();
+            } else if (msg.type === 'melnote-page-error') {
+                // Uncaught error inside the editor page (its own JS context).
+                logError(typeof msg.value === 'string' ? msg.value : 'Unknown page error', 'webview');
             } else if (msg.type === 'melnote-image-action' && onImageAction) {
                 Keyboard.dismiss();
                 onImageAction((msg as any).action);
@@ -1424,9 +1469,13 @@ export const RichEditor: React.FC<RichEditorProps> = ({
                 containerStyle={{ flex: 1, width: '100%', backgroundColor: bgColor }}
                 showsVerticalScrollIndicator={false}
                 onLoad={handleLoad}
-                {...((journalMeta && (onTitleChange || onTitleFocusChange || onMentionQuery)) || onImageSelectionChange || onImageAction
-                    ? { exclusivelyUseCustomOnMessage: false, onMessage: handleWebviewMessage }
-                    : {})}
+                // Always wired: besides the journal/editor messages, the page
+                // forwards its own uncaught errors here so they reach the
+                // on-device error log. TenTap keeps receiving its own
+                // messages (exclusivelyUseCustomOnMessage={false}), and the
+                // handler ignores every message that is not ours.
+                exclusivelyUseCustomOnMessage={false}
+                onMessage={handleWebviewMessage}
             />
         </View>
     );

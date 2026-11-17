@@ -52,6 +52,11 @@ import { BricolageGrotesque_700Bold, BricolageGrotesque_800ExtraBold } from '@ex
 import { Fraunces_700Bold, Fraunces_900Black } from '@expo-google-fonts/fraunces';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
+import { initErrorLog } from '../utils/errorLog';
+
+// Install the on-device error log as early as possible, so startup failures
+// are captured too. Safe to call more than once.
+initErrorLog();
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();

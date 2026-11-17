@@ -7,7 +7,7 @@ import { useSettings, ThemeMode } from '../store/SettingsContext';
 import { Colors } from '../constants/Colors';
 import { DesignSystem } from '../constants/DesignSystem';
 import { Typography } from '../constants/Typography';
-import { CaretLeft, CaretRight, Moon, Sun, Desktop as Monitor, Waveform, Trash, Database, Info, GithubLogo as Github, ShieldCheck, Heart, ShareNetwork as Share2, ArrowsInLineHorizontal, Sliders, ArrowSquareOut as ExternalLink, DownloadSimple as Download, Bell, ListMagnifyingGlass as ListFilter, Layout, TextT, SelectionBackground, MagicWand, Cards, Compass, PaintBrush, Book, LockKey, Calendar, CircleHalf, Mosaic, Palette } from '@/components/ui/Icon';
+import { CaretLeft, CaretRight, Moon, Sun, Desktop as Monitor, Waveform, Trash, Database, Info, Bug, ShieldCheck, Heart, ShareNetwork as Share2, ArrowsInLineHorizontal, Sliders, ArrowSquareOut as ExternalLink, DownloadSimple as Download, Bell, ListMagnifyingGlass as ListFilter, Layout, TextT, SelectionBackground, MagicWand, Cards, Compass, PaintBrush, Book, FileText, LockKey, Calendar, CircleHalf, Mosaic, Palette } from '@/components/ui/Icon';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import * as Haptics from 'expo-haptics';
@@ -36,6 +36,11 @@ import { ExpBadge } from '../components/ui/ExpBadge';
 import { AlertModal } from '../components/ui/AlertModal';
 import { ScalePressable } from '../components/ui/ScalePressable';
 import { APP_VERSION } from '../constants/Version';
+import { buildBugReport, buildBugReportMailto, type BugReport } from '../utils/errorLog';
+import { BugReportModal } from '../components/ui/BugReportModal';
+
+// TODO: replace with the address that should receive bug reports.
+const BUG_REPORT_EMAIL = 'voileetdev@gmail.com';
 
 export default function SettingsScreen() {
     const { settings, updateSetting, resetSettings, refreshApp, reloadSettings } = useSettings();
@@ -52,6 +57,11 @@ export default function SettingsScreen() {
     const [isExporting, setIsExporting] = useState(false);
     const [isImporting, setIsImporting] = useState(false);
     const [alertConfig, setAlertConfig] = useState<{ visible: boolean, title: string, description: string, type: 'success' | 'error' | 'info' | 'warning', onClose?: () => void } | null>(null);
+    // The bug report is previewed before the email opens, so the user sees
+    // exactly what would be sent. The same snapshot is then used for the
+    // email, so the preview and the mail can never disagree.
+    const [showBugReport, setShowBugReport] = useState(false);
+    const [bugReport, setBugReport] = useState<BugReport | null>(null);
 
 
     const showAlert = (title: string, description: string, type: 'success' | 'error' | 'info' | 'warning' = 'info', onClose?: () => void) => {
@@ -249,6 +259,45 @@ export default function SettingsScreen() {
         Linking.openURL(url).catch(() => {
             showAlert("Link Error", "Could not open external browser.", "error");
         });
+    };
+
+    const handleReportBug = () => {
+        triggerHaptic();
+        // Build the report once: the preview and the email both use it.
+        let report: BugReport = {
+            subject: 'Melnote bug report',
+            body: 'The error log could not be read on this device.',
+            errorCount: 0,
+        };
+        try {
+            report = buildBugReport();
+        } catch (error) {
+            console.warn('Could not build the bug report preview:', error);
+        }
+        setBugReport(report);
+        setShowBugReport(true);
+    };
+
+    const handleSendBugReport = async () => {
+        setShowBugReport(false);
+        try {
+            // Same address, same contents as the preview. Nothing is sent
+            // until the user sends the email themselves.
+            const url = buildBugReportMailto(BUG_REPORT_EMAIL, bugReport || undefined);
+            await Linking.openURL(url);
+        } catch (error) {
+            console.warn('Could not open the email app:', error);
+            // The preview modal is being torn down here. Two Modal windows
+            // open at once are unreliable on Android, so wait for it to be
+            // gone before showing the alert.
+            setTimeout(() => {
+                showAlert(
+                    "No Email App",
+                    "Melnote could not open an email app. Install one, then try again.",
+                    "error"
+                );
+            }, 380);
+        }
     };
 
     return (
@@ -508,16 +557,22 @@ export default function SettingsScreen() {
                         <MenuOption
                             label="Privacy Policy"
                             icon={<ShieldCheck size={20} color={colors.secondary} />}
-                            onPress={() => openLink('https://github.com/voilry/melnote/blob/main/PRIVACY.md')}
+                            onPress={() => openLink('https://sites.google.com/view/melnote/privacy-policy')}
                             colors={colors}
                             rightIcon={<ExternalLink size={14} color={colors.icon} />}
                         />
                         <MenuOption
-                            label="GitHub Repository"
-                            icon={<Github size={20} color={colors.secondary} />}
-                            onPress={() => openLink('https://github.com/voilry/melnote')}
+                            label="Terms of Service"
+                            icon={<FileText size={20} color={colors.secondary} />}
+                            onPress={() => openLink('https://sites.google.com/view/melnote/terms-of-service')}
                             colors={colors}
                             rightIcon={<ExternalLink size={14} color={colors.icon} />}
+                        />
+                        <MenuOption
+                            label="Report a bug"
+                            icon={<Bug size={20} color={colors.secondary} />}
+                            onPress={handleReportBug}
+                            colors={colors}
                         />
                         <View style={styles.infoRow}>
                             <Heart size={16} color={colors.error} weight="fill" />
@@ -587,6 +642,14 @@ export default function SettingsScreen() {
                     setAlertConfig(null);
                     if (cb) cb();
                 }}
+            />
+
+            <BugReportModal
+                visible={showBugReport}
+                reportBody={bugReport?.body || ''}
+                errorCount={bugReport?.errorCount || 0}
+                onClose={() => setShowBugReport(false)}
+                onReport={handleSendBugReport}
             />
         </ThemedView>
     );
