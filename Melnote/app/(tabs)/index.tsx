@@ -26,7 +26,6 @@ import { DesignSystem } from '../../constants/DesignSystem';
 import { Typography } from '../../constants/Typography';
 import { SearchBar } from '../../components/ui/SearchBar';
 import { Badge } from '../../components/ui/Badge';
-import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
 import { useAppTheme } from '../../hooks/useAppTheme';
 import { GroupSelector, GroupSelectorHandle } from '../../components/GroupSelector';
@@ -41,7 +40,10 @@ import { DashboardGroupCard } from '../../components/person/DashboardGroupCard';
 import { ManageGroupMembersModal } from '../../components/person/ManageGroupMembersModal';
 import { EntryRepository } from '../../db/repositories/EntryRepository';
 import { markdownPreviewText } from '../../utils/markdownConverter';
-import { persistAvatar, deleteAvatarFile } from '../../utils/avatar';
+import { persistCroppedAvatar, deleteAvatarFile } from '../../utils/avatar';
+import { usePickerHost } from '../../components/ui/usePickerHost';
+import type { MediaCropRect } from '../../utils/media';
+import { ImageCropView } from '../../components/ui/ImageCropView';
 import { useSettings } from '../../store/SettingsContext';
 import { AddReminderModal } from '../../components/calendar/AddReminderModal';
 import { DeleteModal } from '../../components/ui/DeleteModal';
@@ -235,6 +237,15 @@ export default function PeopleScreen() {
     const [newBirthdate, setNewBirthdate] = useState('');
     const [newFirstMet, setNewFirstMet] = useState('');
     const [newAvatarUri, setNewAvatarUri] = useState<string | null>(null);
+    // A freshly picked photo, before it has been cropped into app storage.
+    const [newAvatarSource, setNewAvatarSource] = useState<string | null>(null);
+    const [isCroppingAvatar, setIsCroppingAvatar] = useState(false);
+    // True while the sheet is being rebuilt around a photo pick. The rebuild
+    // remounts the sheet, and without this its entrance animations would
+    // replay in the middle of the interaction.
+    const [skipIntro, setSkipIntro] = useState(false);
+    // Keeps the sheet out of Android's way for the duration of the picker.
+    const { generation: pickerGeneration, pick: pickAvatar } = usePickerHost();
 
     // Group Assignment Modal
     const [showAssignModal, setShowAssignModal] = useState(false);
@@ -580,19 +591,24 @@ export default function PeopleScreen() {
     };
 
     const pickImage = async () => {
-        let result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            allowsEditing: true,
-            aspect: [1, 1],
-            quality: 0.5,
-        });
+        if (hapticsEnabled && Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-        if (!result.canceled) {
-            // The picker returns a temporary cache file - store a copy the
-            // app owns so the avatar cannot be purged out from under us.
-            const persisted = await persistAvatar(result.assets[0].uri);
-            setNewAvatarUri(persisted);
-        }
+        // The sheet stays up while the picker animates in; `usePickerHost`
+        // drops the dialog once the picker covers us. See that hook.
+        setSkipIntro(true);
+        const uri = await pickAvatar();
+        if (uri) setNewAvatarSource(uri);
+    };
+
+    const applyAvatarCrop = async (rect: MediaCropRect) => {
+        if (!newAvatarSource) return;
+
+        setIsCroppingAvatar(true);
+        const persisted = await persistCroppedAvatar(newAvatarSource, rect);
+        setIsCroppingAvatar(false);
+        setNewAvatarSource(null);
+        if (newAvatarUri) void deleteAvatarFile(newAvatarUri);
+        setNewAvatarUri(persisted);
     };
 
     const handleAddPerson = async () => {
@@ -633,12 +649,16 @@ export default function PeopleScreen() {
         setNewBirthdate('');
         setNewFirstMet('');
         setNewAvatarUri(null);
+        setNewAvatarSource(null);
     };
 
     const closeAddModal = () => {
         // An avatar that was picked but never saved is ours to remove.
         if (newAvatarUri) void deleteAvatarFile(newAvatarUri);
         setNewAvatarUri(null);
+        setNewAvatarSource(null);
+        // The next open is a normal one, so it gets its entrance animation back.
+        setSkipIntro(false);
         setShowAddModal(false);
     };
 
@@ -977,11 +997,19 @@ export default function PeopleScreen() {
             />
 
             <Modal
+                key={pickerGeneration}
                 visible={addModalMounted}
                 animationType="none"
                 transparent
                 statusBarTranslucent={true}
-                onRequestClose={closeAddModal}
+                onRequestClose={() => {
+                    // While the crop is open, back belongs to the crop.
+                    if (newAvatarSource) {
+                        setNewAvatarSource(null);
+                        return;
+                    }
+                    closeAddModal();
+                }}
             >
                 <Animated.View style={[styles.fullScreenPage, { backgroundColor: colors.background }, addModalSlideStyle]}>
                     <StatusBar style="auto" />
@@ -1015,8 +1043,8 @@ export default function PeopleScreen() {
                         contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
                         bottomOffset={24}
                     >
-                            <Animated.View 
-                                entering={ZoomIn.duration(440).springify().damping(22).stiffness(140).mass(0.9)}
+                            <Animated.View
+                                entering={skipIntro ? undefined : ZoomIn.duration(440).springify().damping(22).stiffness(140).mass(0.9)}
                                 style={styles.fullScreenAvatarSection}
                             >
                                 <ScalePressable
@@ -1033,7 +1061,7 @@ export default function PeopleScreen() {
                             </Animated.View>
 
                             <View style={styles.fullScreenForm}>
-                                <Animated.View entering={FadeInDown.delay(70).duration(460).springify().damping(22).stiffness(120).mass(1.0)}>
+                                <Animated.View entering={skipIntro ? undefined : FadeInDown.delay(70).duration(460).springify().damping(22).stiffness(120).mass(1.0)}>
                                     <Input
                                         label="Full Name"
                                         placeholder="e.g. Jean-Luc Picard"
@@ -1053,7 +1081,7 @@ export default function PeopleScreen() {
                                     />
                                 </Animated.View>
 
-                                <Animated.View entering={FadeInDown.delay(140).duration(460).springify().damping(22).stiffness(120).mass(1.0)} style={{ marginTop: 16 }}>
+                                <Animated.View entering={skipIntro ? undefined : FadeInDown.delay(140).duration(460).springify().damping(22).stiffness(120).mass(1.0)} style={{ marginTop: 16 }}>
                                     <View style={styles.fullScreenRow}>
                                         <View style={{ flex: 1, marginRight: 12 }}>
                                             <Input
@@ -1085,6 +1113,19 @@ export default function PeopleScreen() {
                                 </Animated.View>
                             </View>
                     </KeyboardAwareScrollView>
+
+                    {newAvatarSource && (
+                        <View style={StyleSheet.absoluteFill}>
+                            <ImageCropView
+                                uri={newAvatarSource}
+                                busy={isCroppingAvatar}
+                                lockedRatio={1}
+                                confirmUnchanged
+                                onCancel={() => setNewAvatarSource(null)}
+                                onConfirm={applyAvatarCrop}
+                            />
+                        </View>
+                    )}
                 </Animated.View>
             </Modal>
             <ManageGroupMembersModal

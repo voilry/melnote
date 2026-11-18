@@ -30,6 +30,21 @@ import type { MediaCropRect } from '../../utils/media';
 interface ImageCropViewProps {
     uri: string;
     busy?: boolean;
+    /**
+     * Lock the frame to one aspect ratio and hide the ratio picker. The frame
+     * opens as the largest square the bitmap can hold. Used by avatars, where
+     * the output is always cropped to 1:1.
+     */
+    lockedRatio?: number;
+    /**
+     * Report the crop even when the frame still covers the whole bitmap.
+     *
+     * The note editor skips the round trip in that case (nothing to crop, the
+     * original is already on disk). An avatar pick is different: the picked
+     * file is still in the picker's cache, so it must be cropped, re-encoded
+     * and copied into app storage even when the frame fills the image.
+     */
+    confirmUnchanged?: boolean;
     onCancel: () => void;
     onConfirm: (rect: MediaCropRect) => void;
 }
@@ -64,7 +79,14 @@ function clamp(value: number, min: number, max: number) {
  * All crop geometry lives in shared values so dragging the frame and its
  * corners never re-renders React; only the pixel rect is computed on Done.
  */
-export function ImageCropView({ uri, busy = false, onCancel, onConfirm }: ImageCropViewProps) {
+export function ImageCropView({
+    uri,
+    busy = false,
+    lockedRatio,
+    confirmUnchanged = false,
+    onCancel,
+    onConfirm,
+}: ImageCropViewProps) {
     const insets = useSafeAreaInsets();
     const { colors, hapticsEnabled } = useAppTheme();
 
@@ -72,6 +94,9 @@ export function ImageCropView({ uri, busy = false, onCancel, onConfirm }: ImageC
     const [natural, setNatural] = React.useState<{ width: number; height: number } | null>(null);
     const [failed, setFailed] = React.useState(false);
     const [ratio, setRatio] = React.useState<number | null>(null);
+    // A locked ratio wins over whatever the picker last had; when it is set the
+    // picker itself is hidden, so the state below is simply never touched.
+    const activeRatio = lockedRatio ?? ratio;
     const [applying, setApplying] = React.useState(false);
     // The frame geometry lives in shared values that start at zero, so the
     // overlay must not mount until they hold the image rect. Otherwise the
@@ -141,12 +166,24 @@ export function ImageCropView({ uri, busy = false, onCancel, onConfirm }: ImageC
             setFrameReady(false);
             return;
         }
+        if (lockedRatio != null) {
+            // Open on the largest frame of the locked ratio, centred, so a
+            // 3:4 portrait does not start with an out-of-bounds frame.
+            const width = Math.min(imageRect.width, imageRect.height * lockedRatio);
+            const height = width / lockedRatio;
+            fx.value = imageRect.x + (imageRect.width - width) / 2;
+            fy.value = imageRect.y + (imageRect.height - height) / 2;
+            fw.value = width;
+            fh.value = height;
+            setFrameReady(true);
+            return;
+        }
         fx.value = imageRect.x;
         fy.value = imageRect.y;
         fw.value = imageRect.width;
         fh.value = imageRect.height;
         setFrameReady(true);
-    }, [imageRect, fx, fy, fw, fh]);
+    }, [imageRect, lockedRatio, fx, fy, fw, fh]);
 
     const imgX = imageRect?.x ?? 0;
     const imgY = imageRect?.y ?? 0;
@@ -202,14 +239,14 @@ export function ImageCropView({ uri, busy = false, onCancel, onConfirm }: ImageC
                 let w = left ? fixedX - cornerX : cornerX - fixedX;
                 let h = top ? fixedY - cornerY : cornerY - fixedY;
 
-                if (ratio != null) {
-                    if (w / h > ratio) h = w / ratio;
-                    else w = h * ratio;
+                if (activeRatio != null) {
+                    if (w / h > activeRatio) h = w / activeRatio;
+                    else w = h * activeRatio;
                     w = clamp(w, MIN_SIZE, maxW);
-                    h = w / ratio;
+                    h = w / activeRatio;
                     if (h > maxH) {
                         h = maxH;
-                        w = h * ratio;
+                        w = h * activeRatio;
                     }
                 } else {
                     w = clamp(w, MIN_SIZE, maxW);
@@ -333,7 +370,11 @@ export function ImageCropView({ uri, busy = false, onCancel, onConfirm }: ImageC
         // the view instead of re-encoding an identical image. Compare with a
         // one-pixel tolerance because the display -> source scale is a float,
         // so an untouched frame can land a pixel short after rounding.
+        //
+        // Callers that need the file itself (an avatar pick that still lives in
+        // the picker cache) opt out of this shortcut with `confirmUnchanged`.
         if (
+            !confirmUnchanged &&
             originX <= 1 &&
             originY <= 1 &&
             width >= natural.width - 1 &&
@@ -475,46 +516,50 @@ export function ImageCropView({ uri, busy = false, onCancel, onConfirm }: ImageC
                     )}
                 </View>
 
-                <View style={[styles.footer, { paddingBottom: insets.bottom + 18 }]}>
-                    <ScrollView
-                        horizontal
-                        showsHorizontalScrollIndicator={false}
-                        contentContainerStyle={styles.ratioRow}
-                    >
-                        {RATIOS.map(option => {
-                            const active = ratio === option.value;
-                            return (
-                                <ScalePressable
-                                    key={option.label}
-                                    onPress={() => chooseRatio(option.value)}
-                                    haptic={false}
-                                    // Aspect only means something once the image
-                                    // rect exists; before that the chip would
-                                    // show as active while the frame stays free.
-                                    disabled={blocked || !ready}
-                                    style={[
-                                        styles.ratioChip,
-                                        {
-                                            backgroundColor: active ? colors.tint : colors.surface,
-                                            opacity: blocked || !ready ? 0.5 : 1,
-                                        },
-                                    ]}
-                                    innerStyle={{ borderRadius: 19 }}
-                                    accessibilityLabel={`Crop aspect ${option.label}`}
-                                >
-                                    <ThemedText
+                {lockedRatio == null && (
+                    <View style={[styles.footer, { paddingBottom: insets.bottom + 18 }]}>
+                        <ScrollView
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            contentContainerStyle={styles.ratioRow}
+                        >
+                            {RATIOS.map(option => {
+                                const active = ratio === option.value;
+                                return (
+                                    <ScalePressable
+                                        key={option.label}
+                                        onPress={() => chooseRatio(option.value)}
+                                        haptic={false}
+                                        // Aspect only means something once the image
+                                        // rect exists; before that the chip would
+                                        // show as active while the frame stays free.
+                                        disabled={blocked || !ready}
                                         style={[
-                                            styles.ratioText,
-                                            { color: active ? colors.tintContrast : colors.text },
+                                            styles.ratioChip,
+                                            {
+                                                backgroundColor: active ? colors.tint : colors.surface,
+                                                opacity: blocked || !ready ? 0.5 : 1,
+                                            },
                                         ]}
+                                        innerStyle={{ borderRadius: 19 }}
+                                        accessibilityLabel={`Crop aspect ${option.label}`}
                                     >
-                                        {option.label}
-                                    </ThemedText>
-                                </ScalePressable>
-                            );
-                        })}
-                    </ScrollView>
-                </View>
+                                        <ThemedText
+                                            style={[
+                                                styles.ratioText,
+                                                { color: active ? colors.tintContrast : colors.text },
+                                            ]}
+                                        >
+                                            {option.label}
+                                        </ThemedText>
+                                    </ScalePressable>
+                                );
+                            })}
+                        </ScrollView>
+                    </View>
+                )}
+
+                {lockedRatio != null && <View style={{ height: insets.bottom + 18 }} />}
 
                 {blocked && (
                     <View style={styles.busy}>

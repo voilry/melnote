@@ -216,10 +216,15 @@ export type MediaEditAction =
     | { type: 'crop'; rect: MediaCropRect };
 
 /** Clamps a crop window to the decoded bitmap and returns whole pixels. */
-function clampCropRect(
+export function clampCropRect(
     width: number,
     height: number,
-    rect: MediaCropRect
+    rect: MediaCropRect,
+    /**
+     * Avatars are always re-encoded, even when the frame covers the whole
+     * photo, so they need the full rectangle back instead of "nothing to do".
+     */
+    options?: { allowFullFrame?: boolean }
 ): MediaCropRect | null {
     if (!width || !height || !rect) return null;
     const originX = Math.max(0, Math.min(width - 1, Math.round(rect.originX)));
@@ -228,7 +233,7 @@ function clampCropRect(
     const cropHeight = Math.max(1, Math.min(height - originY, Math.round(rect.height)));
     if (!cropWidth || !cropHeight) return null;
     // Nothing to crop: the frame covers the whole bitmap.
-    if (originX === 0 && originY === 0 && cropWidth === width && cropHeight === height) {
+    if (!options?.allowFullFrame && originX === 0 && originY === 0 && cropWidth === width && cropHeight === height) {
         return null;
     }
     return { originX, originY, width: cropWidth, height: cropHeight };

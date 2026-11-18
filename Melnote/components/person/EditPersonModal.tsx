@@ -10,9 +10,11 @@ import { Input } from '../ui/Input';
 import { Avatar } from '../ui/Avatar';
 import { DatePicker } from '../ui/DatePicker';
 import { X, PhotoAlbum, Check } from '@/components/ui/Icon';
-import * as ImagePicker from 'expo-image-picker';
 import { Person } from '../../db/repositories/PersonRepository';
-import { persistAvatar, deleteAvatarFile } from '../../utils/avatar';
+import { persistCroppedAvatar, deleteAvatarFile } from '../../utils/avatar';
+import { usePickerHost } from '../ui/usePickerHost';
+import type { MediaCropRect } from '../../utils/media';
+import { ImageCropView } from '../ui/ImageCropView';
 import { useAppTheme } from '../../hooks/useAppTheme';
 import { useSettings } from '../../store/SettingsContext';
 import Animated, { FadeInDown, ZoomIn } from 'react-native-reanimated';
@@ -36,6 +38,14 @@ export function EditPersonModal({ visible, onClose, onSave, person }: EditPerson
     const [birthdate, setBirthdate] = useState(person.birthdate || '');
     const [firstMet, setFirstMet] = useState(person.firstMet || '');
     const [avatarUri, setAvatarUri] = useState(person.avatarUri || null);
+    const [avatarSource, setAvatarSource] = useState<string | null>(null);
+    const [isCroppingAvatar, setIsCroppingAvatar] = useState(false);
+    // True while the sheet is being rebuilt around a photo pick. The rebuild
+    // remounts the sheet, and without this its entrance animations would
+    // replay in the middle of the interaction.
+    const [skipIntro, setSkipIntro] = useState(false);
+    // Keeps the sheet out of Android's way for the duration of the picker.
+    const { generation: pickerGeneration, pick: pickAvatar } = usePickerHost();
     const savedAvatarRef = useRef<string | null>(person.avatarUri || null);
     // The screen animates itself away: Android destroys a native Modal's
     // content the moment `visible` flips, which would leave an empty white
@@ -50,7 +60,12 @@ export function EditPersonModal({ visible, onClose, onSave, person }: EditPerson
             setBirthdate(person.birthdate || '');
             setFirstMet(person.firstMet || '');
             setAvatarUri(person.avatarUri || null);
+            setAvatarSource(null);
             savedAvatarRef.current = person.avatarUri || null;
+        } else {
+            // The next open is a normal one, so it gets its entrance
+            // animation back.
+            setSkipIntro(false);
         }
     }, [visible, person]);
 
@@ -72,34 +87,51 @@ export function EditPersonModal({ visible, onClose, onSave, person }: EditPerson
         if (avatarUri && avatarUri !== savedAvatarRef.current) {
             void deleteAvatarFile(avatarUri);
         }
+        setAvatarSource(null);
         if (hapticsEnabled && Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         onClose();
     };
 
     const pickImage = async () => {
         if (hapticsEnabled && Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        let result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            allowsEditing: true,
-            aspect: [1, 1],
-            quality: 0.5,
-        });
 
-        if (!result.canceled) {
-            // The picker returns a temporary cache file - store a copy the
-            // app owns so the avatar cannot be purged out from under us.
-            const persisted = await persistAvatar(result.assets[0].uri);
-            setAvatarUri(persisted);
+        // The sheet stays up while the picker animates in; `usePickerHost`
+        // drops the dialog once the picker covers us. See that hook.
+        setSkipIntro(true);
+        const uri = await pickAvatar();
+        if (uri) setAvatarSource(uri);
+    };
+
+    const applyAvatarCrop = async (rect: MediaCropRect) => {
+        if (!avatarSource) return;
+
+        setIsCroppingAvatar(true);
+        const persisted = await persistCroppedAvatar(avatarSource, rect);
+        setIsCroppingAvatar(false);
+        setAvatarSource(null);
+        // Only a previously picked-and-unsaved file is ours to drop here; the
+        // saved avatar must survive a cancel.
+        if (avatarUri && avatarUri !== savedAvatarRef.current) {
+            void deleteAvatarFile(avatarUri);
         }
+        setAvatarUri(persisted);
     };
 
     return (
         <Modal
+            key={pickerGeneration}
             visible={modalMounted}
             animationType="none"
             transparent
             statusBarTranslucent={true}
-            onRequestClose={handleClose}
+            onRequestClose={() => {
+                // While the crop is open, back belongs to the crop.
+                if (avatarSource) {
+                    setAvatarSource(null);
+                    return;
+                }
+                handleClose();
+            }}
         >
             <Animated.View style={[styles.container, { backgroundColor: colors.background }, modalSlideStyle]}>
                 <StatusBar style="auto" />
@@ -133,8 +165,8 @@ export function EditPersonModal({ visible, onClose, onSave, person }: EditPerson
                     showsVerticalScrollIndicator={false}
                     bottomOffset={24}
                 >
-                        <Animated.View 
-                            entering={ZoomIn.duration(440).springify().damping(22).stiffness(140).mass(0.9)}
+                        <Animated.View
+                            entering={skipIntro ? undefined : ZoomIn.duration(440).springify().damping(22).stiffness(140).mass(0.9)}
                             style={styles.avatarSection}
                         >
                             <ScalePressable onPress={pickImage} scaleTo={0.94} overlayColor="transparent">
@@ -148,13 +180,13 @@ export function EditPersonModal({ visible, onClose, onSave, person }: EditPerson
                         </Animated.View>
 
                         <View style={styles.formSection}>
-                            <Animated.View entering={FadeInDown.delay(70).duration(460).springify().damping(22).stiffness(120).mass(1.0)}>
+                            <Animated.View entering={skipIntro ? undefined : FadeInDown.delay(70).duration(460).springify().damping(22).stiffness(120).mass(1.0)}>
                                 <Input label="Full Name" value={name} onChangeText={setName} maxLength={40} />
                                 <View style={{ height: 16 }} />
                                 <Input label="Headline" value={pitch} onChangeText={setPitch} multiline placeholder="Bio" maxLength={35} />
                             </Animated.View>
 
-                            <Animated.View entering={FadeInDown.delay(140).duration(460).springify().damping(22).stiffness(120).mass(1.0)} style={{ marginTop: 16 }}>
+                            <Animated.View entering={skipIntro ? undefined : FadeInDown.delay(140).duration(460).springify().damping(22).stiffness(120).mass(1.0)} style={{ marginTop: 16 }}>
                                 <View style={styles.row}>
                                     <View style={{ flex: 1, marginRight: 12 }}>
                                         <Input label="Gender" value={gender} onChangeText={setGender} maxLength={20} />
@@ -169,6 +201,19 @@ export function EditPersonModal({ visible, onClose, onSave, person }: EditPerson
                             </Animated.View>
                         </View>
                 </KeyboardAwareScrollView>
+
+                {avatarSource && (
+                    <View style={StyleSheet.absoluteFill}>
+                        <ImageCropView
+                            uri={avatarSource}
+                            busy={isCroppingAvatar}
+                            lockedRatio={1}
+                            confirmUnchanged
+                            onCancel={() => setAvatarSource(null)}
+                            onConfirm={applyAvatarCrop}
+                        />
+                    </View>
+                )}
             </Animated.View>
         </Modal>
     );
