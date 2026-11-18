@@ -56,7 +56,13 @@ const MEDIA_REF_PATTERN = /media\/[A-Za-z0-9_.-]+\.(?:jpg|jpeg|png|webp|gif)/gi;
  * up on: restoring someone else's lock on a device without enrolled
  * biometrics would lock the owner out of their own notes.
  */
-const DEVICE_LOCAL_SETTING_KEYS = ['appLockEnabled', 'biometricEnabled'];
+const DEVICE_LOCAL_SETTING_KEYS = [
+    'appLockEnabled',
+    'biometricEnabled',
+    'appLockTimeout',
+    'appLockFailures',
+    'appLockLockedUntil',
+];
 
 export interface BackupSummary {
     formatVersion: number;

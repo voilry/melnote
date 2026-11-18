@@ -27,6 +27,7 @@ import { htmlToMarkdown, markdownToHtml, markdownPreviewText } from '../../utils
 import { materializeDataImages } from '../../utils/media';
 import { IMAGE_ALIGN_CODE } from '../../utils/imageSelection';
 import { extractMentionedIds } from '../../utils/mentions';
+import { runExternalActivity } from '../../utils/externalActivity';
 import * as Haptics from 'expo-haptics';
 
 const bridgeExtensions = TenTapStartKit.filter(ext => ext.name !== 'placeholder');
@@ -447,11 +448,13 @@ export default function JournalEditorScreen() {
             try {
                 triggerHaptic();
                 const shareTitle = title.trim() ? `${title.trim()}\n` : '';
-                await Share.share({
+                // The share sheet takes the app off the screen. Announcing it
+                // stops the app lock from springing up on the way back.
+                await runExternalActivity(() => Share.share({
                     message: `${shareTitle}Date: ${journal.date}\n\n${markdownPreviewText(content)}`,
                 }, {
                     dialogTitle: `Share: ${title || 'Journal Entry'}`,
-                });
+                }));
             } catch (error) {
                 console.log('Share error:', error);
             }

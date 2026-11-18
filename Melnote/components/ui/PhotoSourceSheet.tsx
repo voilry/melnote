@@ -15,6 +15,7 @@ import { useAppTheme } from '../../hooks/useAppTheme';
 import { Typography } from '../../constants/Typography';
 import { Camera, PhotoAlbum } from '@/components/ui/Icon';
 import { importPickedImage, type ImportedImage } from '../../utils/media';
+import { runExternalActivity } from '../../utils/externalActivity';
 import { ScalePressable } from './ScalePressable';
 import { useModalPresence } from './useModalPresence';
 
@@ -45,33 +46,39 @@ export function PhotoSourceSheet({ visible, onClose, onPicked, title }: PhotoSou
         if (importing) return;
         setImporting(true);
         try {
-            const permission = source === 'camera'
-                ? await ImagePicker.requestCameraPermissionsAsync()
-                : await ImagePicker.requestMediaLibraryPermissionsAsync();
-            if (!permission.granted) {
-                Alert.alert(
-                    'Permission needed',
-                    source === 'camera'
-                        ? 'Melnote needs camera access to take a photo for your note.'
-                        : 'Melnote needs access to your photos to add one to your note.'
-                );
-                return;
-            }
+            // The permission prompt, the picker and the camera all take the app
+            // off the screen. Announcing the whole flow stops the app lock
+            // from springing up on the way back, in the middle of the very task
+            // the owner started.
+            await runExternalActivity(async () => {
+                const permission = source === 'camera'
+                    ? await ImagePicker.requestCameraPermissionsAsync()
+                    : await ImagePicker.requestMediaLibraryPermissionsAsync();
+                if (!permission.granted) {
+                    Alert.alert(
+                        'Permission needed',
+                        source === 'camera'
+                            ? 'Melnote needs camera access to take a photo for your note.'
+                            : 'Melnote needs access to your photos to add one to your note.'
+                    );
+                    return;
+                }
 
-            const result = source === 'camera'
-                ? await ImagePicker.launchCameraAsync({ quality: 1, allowsEditing: false })
-                : await ImagePicker.launchImageLibraryAsync({
-                    mediaTypes: ['images'],
-                    quality: 1,
-                    allowsEditing: false,
-                    selectionLimit: 1,
-                });
+                const result = source === 'camera'
+                    ? await ImagePicker.launchCameraAsync({ quality: 1, allowsEditing: false })
+                    : await ImagePicker.launchImageLibraryAsync({
+                        mediaTypes: ['images'],
+                        quality: 1,
+                        allowsEditing: false,
+                        selectionLimit: 1,
+                    });
 
-            if (result.canceled || !result.assets?.length) return;
+                if (result.canceled || !result.assets?.length) return;
 
-            const image = await importPickedImage(result.assets[0]);
-            onClose();
-            onPicked(image);
+                const image = await importPickedImage(result.assets[0]);
+                onClose();
+                onPicked(image);
+            });
         } catch (_error) {
             Alert.alert(
                 'Could not add image',

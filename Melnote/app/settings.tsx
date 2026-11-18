@@ -37,6 +37,7 @@ import { AlertModal } from '../components/ui/AlertModal';
 import { ScalePressable } from '../components/ui/ScalePressable';
 import { APP_VERSION } from '../constants/Version';
 import { buildBugReport, buildBugReportMailto, type BugReport } from '../utils/errorLog';
+import { runExternalActivity } from '../utils/externalActivity';
 import { BugReportModal } from '../components/ui/BugReportModal';
 
 // TODO: replace with the address that should receive bug reports.
@@ -186,10 +187,12 @@ export default function SettingsScreen() {
         importingRef.current = true;
         setIsImporting(true);
         try {
-            const result = await DocumentPicker.getDocumentAsync({
+            // The system file picker takes the app off the screen. Announcing
+            // it stops the app lock from springing up on the way back.
+            const result = await runExternalActivity(() => DocumentPicker.getDocumentAsync({
                 type: '*/*',
                 copyToCacheDirectory: true
-            });
+            }));
 
             if (result.canceled) return;
 

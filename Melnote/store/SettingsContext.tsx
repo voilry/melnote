@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useCallback, useContext, useState, useEffect } from 'react';
 import { SettingsRepository } from '../db/repositories/SettingsRepository';
+import { DEFAULT_APP_LOCK_TIMEOUT_SECONDS } from '../utils/appLock';
 
 export type ThemeMode = 'auto' | 'light' | 'dark';
 
@@ -23,6 +24,12 @@ interface Settings {
     profileTabsOrder: string[];
     appLockEnabled: boolean;
     biometricEnabled: boolean;
+    /** How long the app may be away before it locks again, in seconds. */
+    appLockTimeout: number;
+    /** Wrong passcodes so far. Kept so restarting the app does not wipe the penalty. */
+    appLockFailures: number;
+    /** Until when passcode attempts are refused (epoch ms). */
+    appLockLockedUntil: number;
     amoledEnabled: boolean;
     materialYouEnabled: boolean;
 }
@@ -35,8 +42,6 @@ interface SettingsContextType {
     /** Null until persisted settings have loaded, so the tour never renders on a guess. */
     hasCompletedOnboarding: boolean | null;
     completeOnboarding: () => void;
-    lastSecurityEvent: number;
-    triggerSecurityEvent: () => void;
     refreshKey: number;
     refreshApp: () => void;
     /** Re-reads the persisted settings, used after a backup restore. */
@@ -63,6 +68,9 @@ const DEFAULT_SETTINGS: Settings = {
     profileTabsOrder: ['info', 'notes', 'journals', 'contacts'],
     appLockEnabled: false,
     biometricEnabled: false,
+    appLockTimeout: DEFAULT_APP_LOCK_TIMEOUT_SECONDS,
+    appLockFailures: 0,
+    appLockLockedUntil: 0,
     amoledEnabled: true,
     materialYouEnabled: false,
 };
@@ -73,12 +81,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
     const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState<boolean | null>(null);
     const [isLoading, setIsLoading] = useState(true);
-    const [lastSecurityEvent, setLastSecurityEvent] = useState(0);
     const [refreshKey, setRefreshKey] = useState(0);
-
-    const triggerSecurityEvent = () => {
-        setLastSecurityEvent(Date.now());
-    };
 
     const refreshApp = () => {
         setRefreshKey(prev => prev + 1);
@@ -135,6 +138,20 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
             }
             if (stored.appLockEnabled !== undefined) merged.appLockEnabled = stored.appLockEnabled === 'true';
             if (stored.biometricEnabled !== undefined) merged.biometricEnabled = stored.biometricEnabled === 'true';
+            if (stored.appLockTimeout !== undefined) {
+                const seconds = parseInt(stored.appLockTimeout, 10);
+                merged.appLockTimeout = Number.isFinite(seconds) && seconds >= 0
+                    ? seconds
+                    : DEFAULT_APP_LOCK_TIMEOUT_SECONDS;
+            }
+            if (stored.appLockFailures !== undefined) {
+                const failures = parseInt(stored.appLockFailures, 10);
+                merged.appLockFailures = Number.isFinite(failures) && failures > 0 ? failures : 0;
+            }
+            if (stored.appLockLockedUntil !== undefined) {
+                const until = parseInt(stored.appLockLockedUntil, 10);
+                merged.appLockLockedUntil = Number.isFinite(until) && until > 0 ? until : 0;
+            }
             if (stored.showCalendarTab !== undefined) merged.showCalendarTab = stored.showCalendarTab === 'true';
             if (stored.amoledEnabled !== undefined) merged.amoledEnabled = stored.amoledEnabled === 'true';
             if (stored.materialYouEnabled !== undefined) merged.materialYouEnabled = stored.materialYouEnabled === 'true';
@@ -147,13 +164,13 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
-    const updateSetting = <K extends keyof Settings>(key: K, value: Settings[K]) => {
+    const updateSetting = useCallback(<K extends keyof Settings>(key: K, value: Settings[K]) => {
         setSettings(prev => {
             const next = { ...prev, [key]: value };
             SettingsRepository.set(key, value.toString());
             return next;
         });
-    };
+    }, []);
 
     const completeOnboarding = () => {
         // Persist before dismissing. The write is synchronous under the hood, so a
@@ -169,8 +186,28 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     };
 
     const resetSettings = () => {
-        setSettings(DEFAULT_SETTINGS);
+        // The app lock is a security setting, not a look-and-feel one. A
+        // "reset settings" must not quietly switch the lock off and leave the
+        // notes unprotected, so the lock is left exactly as it is.
+        setSettings(prev => ({
+            ...DEFAULT_SETTINGS,
+            appLockEnabled: prev.appLockEnabled,
+            biometricEnabled: prev.biometricEnabled,
+            appLockTimeout: prev.appLockTimeout,
+            appLockFailures: prev.appLockFailures,
+            appLockLockedUntil: prev.appLockLockedUntil,
+        }));
+
+        const kept = new Set<string>([
+            'appLockEnabled',
+            'biometricEnabled',
+            'appLockTimeout',
+            'appLockFailures',
+            'appLockLockedUntil',
+        ]);
+
         Object.entries(DEFAULT_SETTINGS).forEach(([key, value]) => {
+            if (kept.has(key)) return;
             SettingsRepository.set(key, value.toString());
         });
     };
@@ -183,8 +220,6 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
             isLoading, 
             hasCompletedOnboarding,
             completeOnboarding,
-            lastSecurityEvent, 
-            triggerSecurityEvent,
             refreshKey,
             refreshApp,
             reloadSettings

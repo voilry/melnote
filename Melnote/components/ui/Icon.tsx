@@ -72,7 +72,7 @@ export const ContactsFour = (props: any) => <Icon name={props.weight === 'fill' 
 export const LockKey = (props: any) => <Icon name={props.weight === 'fill' ? 'lock_fill' : 'lock_line'} {...props} />;
 export const LockKeyOpen = (props: any) => <Icon name={props.weight === 'fill' ? 'unlock_fill' : 'unlock_line'} {...props} />;
 export const Fingerprint = (props: any) => <Icon name={props.weight === 'fill' ? 'fingerprint_fill' : 'fingerprint_line'} {...props} />;
-export const Backspace = (props: any) => <Icon name={props.weight === 'fill' ? 'backspace_fill' : 'backspace_line'} {...props} />;
+export const Backspace = (props: any) => <Icon name={props.weight === 'fill' ? 'delete_back_fill' : 'delete_back_line'} {...props} />;
 export const Bell = (props: any) => <Icon name={props.weight === 'fill' ? 'notification_fill' : 'notification_line'} {...props} />;
 export const BellDot = (props: any) => <Icon name={props.weight === 'fill' ? 'notification_newdot_fill' : 'notification_newdot_line'} {...props} />;
 export const BookOpen = (props: any) => <Icon name={props.weight === 'fill' ? 'book_2_fill' : 'book_2_line'} {...props} />;
@@ -187,10 +187,10 @@ export const PhotoAlbum = (props: any) => <Icon name={props.weight === 'fill' ? 
 export const UserRemove = (props: any) => <Icon name={props.weight === 'fill' ? 'user_remove_2_fill' : 'user_remove_2_line'} {...props} />;
 export const Trash2 = Trash;
 export const Suitcase = (props: any) => <Icon name={props.weight === 'fill' ? 'suitcase_fill' : 'suitcase_line'} {...props} />;
-export const GraduationCap = (props: any) => <Icon name={props.weight === 'fill' ? 'graduation_fill' : 'graduation_line'} {...props} />;
+export const GraduationCap = (props: any) => <Icon name={props.weight === 'fill' ? 'school_fill' : 'school_line'} {...props} />;
 export const Palette = (props: any) => <Icon name={props.weight === 'fill' ? 'palette_fill' : 'palette_line'} {...props} />;
 export const MusicNotes = (props: any) => <Icon name={props.weight === 'fill' ? 'music_fill' : 'music_line'} {...props} />;
-export const FirstAid = (props: any) => <Icon name={props.weight === 'fill' ? 'medicine_fill' : 'medicine_line'} {...props} />;
+export const FirstAid = (props: any) => <Icon name={props.weight === 'fill' ? 'first_aid_kit_fill' : 'first_aid_kit_line'} {...props} />;
 export const Quotes = (props: any) => <Icon name={props.weight === 'fill' ? 'blockquote_fill' : 'blockquote_line'} {...props} />;
 export const Code = (props: any) => <Icon name={props.weight === 'fill' ? 'code_fill' : 'code_line'} {...props} />;
 export const Minus = (props: any) => <Icon name={props.weight === 'fill' ? 'minimize_fill' : 'minimize_line'} {...props} />;

@@ -1,6 +1,7 @@
 import * as ImagePicker from 'expo-image-picker';
 import { logError } from './errorLog';
 import { showToast } from '../components/ui/Toast';
+import { runExternalActivity } from './externalActivity';
 
 /**
  * Opens the system photo picker and always reports an outcome.
@@ -17,9 +18,12 @@ import { showToast } from '../components/ui/Toast';
  */
 export async function pickImageFromLibrary(): Promise<string | null> {
     try {
-        const result = await ImagePicker.launchImageLibraryAsync({
+        // The system picker takes the app off the screen. Announcing it stops
+        // the app lock from springing up on the way back, in the middle of
+        // the very task the owner started.
+        const result = await runExternalActivity(() => ImagePicker.launchImageLibraryAsync({
             mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        });
+        }));
 
         const asset = result.assets?.[0];
         if (result.canceled || !asset) return null;
