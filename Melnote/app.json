@@ -15,7 +15,8 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#F8F3EB"
       },
-      "package": "com.voilry.melnote"
+      "package": "com.voilry.melnote",
+      "versionCode": 2
     },
     "web": {
       "favicon": "./assets/favicon.png",
