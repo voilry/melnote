@@ -76,5 +76,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: melnote-aab
-          path: ./Melnote/build/melnote.aab
+          path: |
+            ./Melnote/build/melnote.aab
+            ./Melnote/android/app/build/outputs/mapping/release/mapping.txt
+          if-no-files-found: warn
           retention-days: 7
