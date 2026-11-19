@@ -10,7 +10,7 @@ import { ScreenHeader } from '../../components/ui/ScreenHeader';
 import { useAppTheme } from '../../hooks/useAppTheme';
 import { useSettings } from '../../store/SettingsContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { LockKey, Fingerprint, Clock } from '@/components/ui/Icon';
+import { LockKey, Fingerprint, Clock, CaretRight } from '@/components/ui/Icon';
 import * as Haptics from 'expo-haptics';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { DesignSystem } from '../../constants/DesignSystem';
@@ -200,7 +200,7 @@ export default function PrivacySettingsScreen() {
                         <ThemedText
                             style={[
                                 styles.pinHint,
-                                errorMessage ? { color: colors.error } : null,
+                                { color: errorMessage ? colors.error : colors.textSecondary },
                             ]}
                         >
                             {errorMessage
@@ -285,7 +285,7 @@ export default function PrivacySettingsScreen() {
                         <SettingRow
                             label="App Lock"
                             description="Require a passcode to open Melnote."
-                            icon={<LockKey size={20} color={colors.tint} weight="duotone" />}
+                            icon={<LockKey size={22} color={colors.tint} weight="bold" />}
                         >
                             <Toggle
                                 value={settings.appLockEnabled}
@@ -303,9 +303,9 @@ export default function PrivacySettingsScreen() {
                                         : 'No fingerprint or face is enrolled on this device.'}
                                     icon={(
                                         <Fingerprint
-                                            size={20}
+                                            size={22}
                                             color={hasBiometrics ? colors.tint : colors.textTertiary}
-                                            weight="duotone"
+                                            weight="bold"
                                         />
                                     )}
                                 >
@@ -336,12 +336,15 @@ export default function PrivacySettingsScreen() {
                             >
                                 <SettingRow
                                     label="Lock after"
-                                    description="How long Melnote may be away before it locks again."
-                                    icon={<Clock size={20} color={colors.tint} weight="duotone" />}
+                                    description="Time away before locking."
+                                    icon={<Clock size={22} color={colors.tint} weight="bold" />}
                                 >
-                                    <ThemedText style={[styles.rowValue, { color: colors.secondary }]}>
-                                        {timeoutLabel}
-                                    </ThemedText>
+                                    <View style={styles.timeValueWrap}>
+                                        <ThemedText style={[styles.rowValue, { color: colors.secondary }]}>
+                                            {timeoutLabel}
+                                        </ThemedText>
+                                        <CaretRight size={16} color={colors.textTertiary} />
+                                    </View>
                                 </SettingRow>
                             </ScalePressable>
                         </Card>
@@ -422,16 +425,20 @@ function SettingRow({
 }) {
     return (
         <View style={styles.settingRow}>
-            <View style={styles.settingInfo}>
-                <View style={styles.settingTitleGroup}>
+            {icon ? (
+                <View style={styles.iconBox}>
                     {icon}
-                    <ThemedText style={styles.settingLabel}>{label}</ThemedText>
                 </View>
-                <ThemedText type="secondary" style={styles.settingDesc}>
-                    {description}
-                </ThemedText>
+            ) : null}
+            <View style={styles.settingInfo}>
+                <ThemedText style={styles.settingLabel}>{label}</ThemedText>
+                {description ? (
+                    <ThemedText type="secondary" style={styles.settingDesc}>
+                        {description}
+                    </ThemedText>
+                ) : null}
             </View>
-            {children}
+            {children ? <View style={styles.controlBox}>{children}</View> : null}
         </View>
     );
 }
@@ -465,32 +472,42 @@ const styles = StyleSheet.create({
     settingRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: 16,
+        paddingVertical: 16,
+        paddingHorizontal: 16,
+    },
+    iconBox: {
+        width: 26,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     settingInfo: {
         flex: 1,
-        marginRight: 16,
+        marginLeft: 14,
+        marginRight: 12,
+        justifyContent: 'center',
     },
-    settingTitleGroup: {
+    controlBox: {
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    timeValueWrap: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginBottom: 4,
+        gap: 6,
     },
     settingLabel: {
-        fontSize: 16,
-        lineHeight: 21,
+        fontSize: 16.5,
+        lineHeight: 22,
         fontFamily: Typography.fontFamily.bold,
-        marginLeft: 12,
     },
     settingDesc: {
-        fontSize: 13,
-        lineHeight: 18,
+        fontSize: 13.5,
+        lineHeight: 18.5,
         fontFamily: Typography.fontFamily.medium,
-        marginLeft: 32,
+        marginTop: 3,
     },
     rowValue: {
-        fontSize: 14,
+        fontSize: 14.5,
         lineHeight: 20,
         fontFamily: Typography.fontFamily.medium,
     },

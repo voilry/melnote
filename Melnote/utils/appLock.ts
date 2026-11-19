@@ -23,16 +23,30 @@ export const PIN_LENGTH = 4;
  *
  * A four digit passcode is only ten thousand combinations, so without a
  * penalty somebody who can see the screen can simply try them all. The
- * penalty grows with every further failure and then stops growing, so an
- * owner who forgot their passcode is never locked out for good.
+ * penalty grows with every further failure and then stops growing at 30 minutes,
+ * so an owner who forgot their passcode is never locked out for good.
  *
  * Index 0 is "no failures yet". The first four wrong passcodes are free,
- * the fifth one costs half a minute.
+ * the fifth one costs 30 seconds, slowly building up to a maximum of 30 minutes.
  */
-const LOCKOUT_STEPS_MS = [0, 0, 0, 0, 0, 30_000, 60_000, 120_000, 300_000, 600_000, 900_000];
+const LOCKOUT_STEPS_MS = [
+    0,           // 0
+    0,           // 1
+    0,           // 2
+    0,           // 3
+    0,           // 4
+    30_000,      // 5: 30 seconds
+    60_000,      // 6: 1 minute
+    120_000,     // 7: 2 minutes
+    300_000,     // 8: 5 minutes
+    600_000,     // 9: 10 minutes
+    900_000,     // 10: 15 minutes
+    1_200_000,   // 11: 20 minutes
+    1_800_000,   // 12+: 30 minutes
+];
 
-/** The longest a wrong passcode is ever punished. */
-const MAX_LOCKOUT_MS = 15 * 60 * 1000;
+/** The longest a wrong passcode is ever punished (30 minutes). */
+const MAX_LOCKOUT_MS = 30 * 60 * 1000;
 
 /** How long the app may be away before it locks again, in seconds. */
 export const APP_LOCK_TIMEOUTS: ReadonlyArray<{ label: string; short: string; seconds: number }> = [

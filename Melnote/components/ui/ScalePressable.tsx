@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Pressable, StyleProp, ViewStyle, Insets, StyleSheet, Platform, View } from 'react-native';
 import Animated, {
     useAnimatedStyle,
@@ -65,6 +65,26 @@ export function ScalePressable({
         opacity: highlightOpacity.value,
     }));
 
+    useEffect(() => {
+        if (disabled) {
+            if (scale) {
+                scaleValue.value = withSpring(
+                    1,
+                    springConfig || {
+                        damping: 14,
+                        stiffness: 300,
+                        mass: 0.6,
+                        overshootClamping: false,
+                    }
+                );
+            }
+            highlightOpacity.value = withTiming(0, {
+                duration: 150,
+                easing: Easing.bezier(0.3, 0.0, 0.8, 0.15),
+            });
+        }
+    }, [disabled, scale, springConfig]);
+
     const handlePressIn = () => {
         if (disabled) return;
         if (scale) {
@@ -85,7 +105,6 @@ export function ScalePressable({
     };
 
     const handlePressOut = () => {
-        if (disabled) return;
         if (scale) {
             // Material 3 Expressive release: lively, responsive rebound with subtle organic bounce
             scaleValue.value = withSpring(

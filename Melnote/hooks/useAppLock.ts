@@ -27,6 +27,8 @@ export interface AppLockController {
     pinInput: string;
     /** True while the unlock animation plays. */
     unlocking: boolean;
+    /** Brief cooldown period after a wrong attempt to let the shake and error breathe. */
+    isCoolingDown: boolean;
     /** What is written under the title. */
     message: string;
     /** True when the message is a failure rather than a hint. */
@@ -84,6 +86,7 @@ export function useAppLock(): AppLockController {
     // --- what the lock screen shows ---------------------------------------
     const [unlocked, setUnlocked] = useState(false);
     const [unlocking, setUnlocking] = useState(false);
+    const [isCoolingDown, setIsCoolingDown] = useState(false);
     const [pinInput, setPinInputState] = useState('');
     const [message, setMessage] = useState('');
     const [messageIsError, setMessageIsError] = useState(false);
@@ -103,6 +106,7 @@ export function useAppLock(): AppLockController {
     const lockedRef = useRef(false);
     const seeded = useRef(false);
     const unlockTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const cooldownTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const setPin = useCallback((value: string) => {
         pinRef.current = value;
@@ -165,6 +169,7 @@ export function useAppLock(): AppLockController {
     useEffect(() => {
         return () => {
             if (unlockTimer.current) clearTimeout(unlockTimer.current);
+            if (cooldownTimer.current) clearTimeout(cooldownTimer.current);
         };
     }, []);
 
@@ -176,7 +181,12 @@ export function useAppLock(): AppLockController {
             clearTimeout(unlockTimer.current);
             unlockTimer.current = null;
         }
+        if (cooldownTimer.current) {
+            clearTimeout(cooldownTimer.current);
+            cooldownTimer.current = null;
+        }
 
+        setIsCoolingDown(false);
         setUnlocked(false);
         setUnlocking(false);
         setPin('');
@@ -190,7 +200,16 @@ export function useAppLock(): AppLockController {
     }, [setPin]);
 
     const completeUnlock = useCallback(() => {
-        setUnlocking(true);
+        if (unlockTimer.current) {
+            clearTimeout(unlockTimer.current);
+            unlockTimer.current = null;
+        }
+        if (cooldownTimer.current) {
+            clearTimeout(cooldownTimer.current);
+            cooldownTimer.current = null;
+        }
+
+        setIsCoolingDown(false);
         setPin('');
         setMessage('');
         setMessageIsError(false);
@@ -205,13 +224,9 @@ export function useAppLock(): AppLockController {
         }
         AccessibilityInfo.announceForAccessibility('Melnote unlocked');
 
-        // Let the success animation play before the lock screen goes away.
-        if (unlockTimer.current) clearTimeout(unlockTimer.current);
-        unlockTimer.current = setTimeout(() => {
-            unlockTimer.current = null;
-            setUnlocked(true);
-            setUnlocking(false);
-        }, 700);
+        // Immediately dismiss lock screen
+        setUnlocked(true);
+        setUnlocking(false);
     }, [setPin, settings.hapticsEnabled, updateSetting]);
 
     const registerFailure = useCallback((text: string) => {
@@ -230,6 +245,15 @@ export function useAppLock(): AppLockController {
         setPin('');
         setMessage(text);
         setMessageIsError(true);
+        setIsCoolingDown(true);
+
+        // Give the error shake and message a brief breathe room (~550ms)
+        // so fast typing does not instantly dismiss or swallow the error
+        if (cooldownTimer.current) clearTimeout(cooldownTimer.current);
+        cooldownTimer.current = setTimeout(() => {
+            cooldownTimer.current = null;
+            setIsCoolingDown(false);
+        }, 550);
 
         if (settings.hapticsEnabled) {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
@@ -293,7 +317,7 @@ export function useAppLock(): AppLockController {
     }, [completeUnlock, handleMissingPin, registerFailure]);
 
     const pressDigit = useCallback((digit: string) => {
-        if (unlocking) return;
+        if (unlocking || isCoolingDown) return;
         if (Date.now() < lockoutUntil) return;
 
         const next = pinRef.current + digit;
@@ -308,10 +332,10 @@ export function useAppLock(): AppLockController {
         if (next.length === PIN_LENGTH) {
             void verifyPin(next);
         }
-    }, [lockoutUntil, messageIsError, setPin, unlocking, verifyPin]);
+    }, [isCoolingDown, lockoutUntil, messageIsError, setPin, unlocking, verifyPin]);
 
     const pressBackspace = useCallback(() => {
-        if (unlocking) return;
+        if (unlocking || isCoolingDown) return;
         if (Date.now() < lockoutUntil) return;
 
         setPin(pinRef.current.slice(0, -1));
@@ -319,7 +343,7 @@ export function useAppLock(): AppLockController {
             setMessage('');
             setMessageIsError(false);
         }
-    }, [lockoutUntil, messageIsError, setPin, unlocking]);
+    }, [isCoolingDown, lockoutUntil, messageIsError, setPin, unlocking]);
 
     // --- biometrics ---------------------------------------------------------
     const promptBiometric = useCallback(async () => {
@@ -509,6 +533,7 @@ export function useAppLock(): AppLockController {
         presented,
         pinInput,
         unlocking,
+        isCoolingDown,
         message,
         messageIsError,
         lockoutSeconds,

@@ -1,21 +1,25 @@
-import React, { useEffect } from 'react';
-import { Modal, StyleSheet, View } from 'react-native';
-import Animated, {
-    useAnimatedStyle,
-    useSharedValue,
-    withSpring,
-} from 'react-native-reanimated';
+import React from 'react';
+import { Modal, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from './ui/ThemedText';
 import { useAppTheme } from '../hooks/useAppTheme';
 import { useAppLock } from '../hooks/useAppLock';
-import { LockKey, LockKeyOpen } from '@/components/ui/Icon';
+import { LockKey } from '@/components/ui/Icon';
 import { Typography } from '../constants/Typography';
-import { DesignSystem } from '../constants/DesignSystem';
 import { PinKeypad } from './ui/PinKeypad';
 import { PIN_LENGTH } from '../utils/appLock';
 
-const DEFAULT_HINT = 'Enter your passcode to continue.';
+const DEFAULT_HINT = 'Enter passcode to continue';
+
+function formatLockout(seconds: number): string {
+    if (seconds >= 60) {
+        const mins = Math.ceil(seconds / 60);
+        return `Too many wrong passcodes. Try again in ${mins}m.`;
+    }
+    return `Too many wrong passcodes. Try again in ${seconds}s.`;
+}
 
 /**
  * The lock screen.
@@ -27,26 +31,19 @@ const DEFAULT_HINT = 'Enter your passcode to continue.';
  */
 export function AppLock() {
     const { colors, theme } = useAppTheme();
+    const insets = useSafeAreaInsets();
+    const { height } = useWindowDimensions();
     const lock = useAppLock();
 
-    // The success mark grows in when the passcode was right.
-    const successScale = useSharedValue(0);
-    useEffect(() => {
-        successScale.value = lock.unlocking
-            ? withSpring(1, DesignSystem.animation.easing.spring)
-            : 0;
-    }, [lock.unlocking, successScale]);
-
-    const successStyle = useAnimatedStyle(() => ({
-        transform: [{ scale: successScale.value }]
-    }));
+    const compact = height < 700;
+    const lockIconSize = compact ? 36 : 42;
 
     const lockedOut = lock.lockoutSeconds > 0;
     const subtitle = lockedOut
-        ? `Too many wrong passcodes. Try again in ${lock.lockoutSeconds}s.`
+        ? formatLockout(lock.lockoutSeconds)
         : lock.message || DEFAULT_HINT;
     const subtitleIsError = lockedOut || lock.messageIsError;
-    const keypadDisabled = lockedOut || lock.unlocking;
+    const keypadDisabled = lockedOut || lock.unlocking || lock.isCoolingDown;
 
     return (
         <>
@@ -73,61 +70,56 @@ export function AppLock() {
                     // does nothing at all.
                     onRequestClose={() => {}}
                 >
+                    <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
                     <View
-                        style={[styles.container, { backgroundColor: colors.background }]}
+                        style={[
+                            styles.container,
+                            {
+                                backgroundColor: colors.background,
+                                paddingTop: Math.max(insets.top + 16, compact ? 24 : 40),
+                                paddingBottom: Math.max(insets.bottom + 16, compact ? 20 : 32),
+                            },
+                        ]}
                         accessibilityViewIsModal
                     >
-                        {lock.unlocking ? (
-                            <Animated.View style={[styles.successWrap, successStyle]}>
-                                <View style={[styles.successCircle, { backgroundColor: colors.tint }]}>
-                                    <LockKeyOpen
-                                        size={48}
-                                        color={theme === 'dark' ? '#000' : '#fff'}
-                                        weight="bold"
-                                    />
-                                </View>
-                                <ThemedText style={styles.title}>Unlocked</ThemedText>
-                            </Animated.View>
-                        ) : (
-                            <>
-                                <View style={styles.header}>
-                                    <LockKey
-                                        size={44}
-                                        color={lockedOut ? colors.error : colors.tint}
-                                        weight="duotone"
-                                        style={styles.lockIcon}
-                                    />
-                                    <ThemedText style={styles.title}>Melnote is locked</ThemedText>
-
-                                    {/*
-                                        The area keeps its height whatever the
-                                        message says, so a wrong passcode does
-                                        not shove the keypad around.
-                                    */}
-                                    <View style={styles.messageArea}>
-                                        <ThemedText
-                                            style={[
-                                                styles.subtitle,
-                                                subtitleIsError ? { color: colors.error } : null,
-                                            ]}
-                                        >
-                                            {subtitle}
-                                        </ThemedText>
-                                    </View>
-                                </View>
-
-                                <PinKeypad
-                                    length={PIN_LENGTH}
-                                    value={lock.pinInput}
-                                    onDigit={lock.pressDigit}
-                                    onBackspace={lock.pressBackspace}
-                                    onBiometric={() => { void lock.promptBiometric(); }}
-                                    showBiometric={lock.biometricEnabled && lock.biometricsAvailable}
-                                    disabled={keypadDisabled}
-                                    error={lock.messageIsError}
+                        <View style={styles.content}>
+                            <View style={[styles.header, compact && styles.headerCompact]}>
+                                <LockKey
+                                    size={lockIconSize}
+                                    color={lockedOut ? colors.error : colors.tint}
+                                    weight="bold"
+                                    style={styles.lockIcon}
                                 />
-                            </>
-                        )}
+                                <ThemedText style={styles.title}>App Locked</ThemedText>
+
+                                {/*
+                                    The area keeps its height whatever the
+                                    message says, so a wrong passcode does
+                                    not shove the keypad around.
+                                */}
+                                <View style={styles.messageArea}>
+                                    <ThemedText
+                                        style={[
+                                            styles.subtitle,
+                                            { color: subtitleIsError ? colors.error : colors.textSecondary },
+                                        ]}
+                                    >
+                                        {subtitle}
+                                    </ThemedText>
+                                </View>
+                            </View>
+
+                            <PinKeypad
+                                length={PIN_LENGTH}
+                                value={lock.pinInput}
+                                onDigit={lock.pressDigit}
+                                onBackspace={lock.pressBackspace}
+                                onBiometric={() => { void lock.promptBiometric(); }}
+                                showBiometric={lock.biometricEnabled && lock.biometricsAvailable}
+                                disabled={keypadDisabled}
+                                error={lock.messageIsError}
+                            />
+                        </View>
                     </View>
                 </Modal>
             )}
@@ -141,41 +133,38 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         paddingHorizontal: 24,
-        paddingBottom: 24,
+    },
+    content: {
+        width: '100%',
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     header: {
         alignItems: 'center',
+        marginBottom: 28,
     },
-    lockIcon: {
+    headerCompact: {
         marginBottom: 18,
     },
+    lockIcon: {
+        marginBottom: 14,
+    },
     title: {
-        fontSize: 26,
-        lineHeight: 32,
-        letterSpacing: -0.6,
+        fontSize: 24,
+        lineHeight: 30,
+        letterSpacing: -0.5,
         fontFamily: Typography.fontFamily.display,
         textAlign: 'center',
     },
     subtitle: {
-        fontSize: 14.5,
-        lineHeight: 21,
+        fontSize: 14,
+        lineHeight: 20,
         fontFamily: Typography.fontFamily.regular,
         textAlign: 'center',
     },
     messageArea: {
-        minHeight: 44,
+        minHeight: 22,
         justifyContent: 'center',
-        marginTop: 6,
-    },
-    successWrap: {
-        alignItems: 'center',
-    },
-    successCircle: {
-        width: 100,
-        height: 100,
-        borderRadius: 50,
-        justifyContent: 'center',
-        alignItems: 'center',
-        ...DesignSystem.shadows.lg,
+        marginTop: 4,
     },
 });

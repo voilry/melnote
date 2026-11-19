@@ -3,6 +3,7 @@ import { StyleSheet, View, useWindowDimensions } from 'react-native';
 import Animated, {
     Extrapolation,
     interpolate,
+    interpolateColor,
     useAnimatedStyle,
     useSharedValue,
     withSequence,
@@ -24,18 +25,12 @@ import { Backspace, Fingerprint } from './Icon';
  * Shared by the lock screen and by the settings screen that creates the
  * passcode, so the two always look and feel the same.
  *
- * What makes the typing feel smooth:
- *
- * - One number holds how much of the passcode has been typed, and every dot
- *   reads from it. A single spring drives all of them, so a digit does not
- *   arrive in the dots one after another.
- *
- * - The dots do not pop. The inner disc grows out of the ring while the ring
- *   grows a little, and a wrong passcode empties them with the same spring
- *   instead of snapping back to nothing.
- *
- * - The keypad uses a spring without overshoot. A key that wobbles past its
- *   resting size and bounces back reads as lag, not as life.
+ * Key features:
+ * - Clean, borderless solid dots that smoothly interpolate to the theme tint
+ *   on input and error red on mistake.
+ * - Tactile, borderless circular keys with soft surface backgrounds.
+ * - Responsive sizing and safe area awareness.
+ * - Single spring driving the dots progress for fluid transitions.
  */
 
 const DIGIT_ROWS = [
@@ -45,9 +40,8 @@ const DIGIT_ROWS = [
 ];
 
 const KEY_SIZE = 68;
-const KEY_GAP = 24;
-const DOT_SIZE = 18;
-const DOT_CORE = 12;
+const KEY_GAP = 22;
+const DOT_SIZE = 14;
 const DOT_GAP = 18;
 
 export interface PinKeypadProps {
@@ -77,24 +71,27 @@ export function PinKeypad({
     disabled = false,
     error = false,
 }: PinKeypadProps) {
-    const { colors } = useAppTheme();
+    const { colors, theme } = useAppTheme();
     const { height } = useWindowDimensions();
 
-    // A short screen has to give the keypad some of its room back, or the
-    // bottom row falls off the bottom of the display.
     const compact = height < 700;
     const keySize = compact ? 58 : KEY_SIZE;
-    const keyGap = compact ? 20 : KEY_GAP;
-    const keypadGap = compact ? 30 : 40;
-    const dotSize = compact ? 16 : DOT_SIZE;
-    const dotCore = compact ? 10 : DOT_CORE;
+    const keyGap = compact ? 18 : KEY_GAP;
+    const keypadGap = compact ? 26 : 36;
+    const dotSize = compact ? 12 : DOT_SIZE;
+    const dotGap = compact ? 14 : DOT_GAP;
 
     const keyStyle = {
         width: keySize,
         height: keySize,
         borderRadius: keySize / 2,
     };
-    const rowStyle = { gap: keyGap, marginBottom: compact ? 14 : 18 };
+    const rowStyle = { gap: keyGap, marginBottom: compact ? 12 : 16 };
+
+    // Soft borderless key background adhering to Melnote's surface elevation
+    const keyBackground = theme === 'dark' ? 'rgba(255, 255, 255, 0.06)' : colors.surface;
+    const emptyDotColor = theme === 'dark' ? 'rgba(255, 255, 255, 0.16)' : 'rgba(0, 0, 0, 0.09)';
+    const activeDotColor = error ? colors.error : colors.tint;
 
     // How much of the passcode has been typed. Every dot reads from it.
     const progress = useSharedValue(0);
@@ -124,13 +121,10 @@ export function PinKeypad({
         transform: [{ translateX: shake.value }],
     }));
 
-    const ringColor = error ? colors.error : colors.border;
-    const coreColor = error ? colors.error : colors.tint;
-
     return (
         <View style={styles.root}>
             <Animated.View
-                style={[styles.dots, { gap: compact ? 16 : DOT_GAP }, dotsStyle]}
+                style={[styles.dots, { gap: dotGap }, dotsStyle]}
                 accessible
                 accessibilityLabel={`${value.length} of ${length} passcode digits entered`}
             >
@@ -139,10 +133,9 @@ export function PinKeypad({
                         key={index}
                         index={index}
                         progress={progress}
-                        ringColor={ringColor}
-                        coreColor={coreColor}
+                        activeColor={activeDotColor}
+                        emptyColor={emptyDotColor}
                         size={dotSize}
-                        core={dotCore}
                     />
                 ))}
             </Animated.View>
@@ -157,6 +150,8 @@ export function PinKeypad({
                                 disabled={disabled}
                                 onPress={() => onDigit(digit)}
                                 keyStyle={keyStyle}
+                                backgroundColor={keyBackground}
+                                compact={compact}
                             />
                         ))}
                     </View>
@@ -167,13 +162,13 @@ export function PinKeypad({
                         <ScalePressable
                             onPress={onBiometric}
                             disabled={disabled}
-                            style={[styles.key, keyStyle]}
-                            scaleTo={0.88}
+                            style={[styles.key, keyStyle, { backgroundColor: keyBackground }]}
+                            scaleTo={0.92}
                             springConfig={DesignSystem.animation.springs.snappy}
                             accessibilityRole="button"
                             accessibilityLabel="Unlock with biometrics"
                         >
-                            <Fingerprint size={compact ? 24 : 26} color={colors.text} />
+                            <Fingerprint size={compact ? 22 : 24} color={colors.text} />
                         </ScalePressable>
                     ) : (
                         <View style={[styles.key, keyStyle]} />
@@ -184,18 +179,26 @@ export function PinKeypad({
                         disabled={disabled}
                         onPress={() => onDigit('0')}
                         keyStyle={keyStyle}
+                        backgroundColor={keyBackground}
+                        compact={compact}
                     />
 
                     <ScalePressable
                         onPress={onBackspace}
-                        disabled={disabled}
-                        style={[styles.key, keyStyle]}
-                        scaleTo={0.88}
+                        disabled={disabled || value.length === 0}
+                        style={[
+                            styles.key,
+                            keyStyle,
+                            {
+                                opacity: value.length === 0 ? 0 : 1,
+                            },
+                        ]}
+                        scaleTo={0.92}
                         springConfig={DesignSystem.animation.springs.snappy}
                         accessibilityRole="button"
                         accessibilityLabel="Delete the last digit"
                     >
-                        <Backspace size={compact ? 24 : 26} color={colors.text} />
+                        <Backspace size={compact ? 22 : 24} color={colors.text} />
                     </ScalePressable>
                 </View>
             </View>
@@ -208,23 +211,29 @@ function DigitKey({
     onPress,
     disabled,
     keyStyle,
+    backgroundColor,
+    compact,
 }: {
     digit: string;
     onPress: () => void;
     disabled: boolean;
     keyStyle: { width: number; height: number; borderRadius: number };
+    backgroundColor: string;
+    compact: boolean;
 }) {
     return (
         <ScalePressable
             onPress={onPress}
             disabled={disabled}
-            style={[styles.key, keyStyle]}
-            scaleTo={0.88}
+            style={[styles.key, keyStyle, { backgroundColor }]}
+            scaleTo={0.92}
             springConfig={DesignSystem.animation.springs.snappy}
             accessibilityRole="button"
             accessibilityLabel={digit}
         >
-            <ThemedText style={styles.keyText}>{digit}</ThemedText>
+            <ThemedText style={[styles.keyText, compact && styles.keyTextCompact]}>
+                {digit}
+            </ThemedText>
         </ScalePressable>
     );
 }
@@ -232,30 +241,26 @@ function DigitKey({
 function PinDot({
     index,
     progress,
-    ringColor,
-    coreColor,
+    activeColor,
+    emptyColor,
     size,
-    core,
 }: {
     index: number;
     progress: SharedValue<number>;
-    ringColor: string;
-    coreColor: string;
+    activeColor: string;
+    emptyColor: string;
     size: number;
-    core: number;
 }) {
-    const ringStyle = useAnimatedStyle(() => {
+    const dotAnimStyle = useAnimatedStyle(() => {
         const amount = interpolate(progress.value, [index, index + 1], [0, 1], Extrapolation.CLAMP);
+        const backgroundColor = interpolateColor(
+            amount,
+            [0, 1],
+            [emptyColor, activeColor]
+        );
         return {
-            transform: [{ scale: 1 + 0.12 * amount }],
-        };
-    });
-
-    const coreStyle = useAnimatedStyle(() => {
-        const amount = interpolate(progress.value, [index, index + 1], [0, 1], Extrapolation.CLAMP);
-        return {
-            opacity: amount,
-            transform: [{ scale: 0.35 + 0.65 * amount }],
+            backgroundColor,
+            transform: [{ scale: 1 + 0.15 * amount }],
         };
     });
 
@@ -267,19 +272,10 @@ function PinDot({
                     width: size,
                     height: size,
                     borderRadius: size / 2,
-                    borderColor: ringColor,
                 },
-                ringStyle,
+                dotAnimStyle,
             ]}
-        >
-            <Animated.View
-                style={[
-                    styles.dotCore,
-                    { width: core, height: core, borderRadius: core / 2, backgroundColor: coreColor },
-                    coreStyle,
-                ]}
-            />
-        </Animated.View>
+        />
     );
 }
 
@@ -291,13 +287,12 @@ const styles = StyleSheet.create({
     dots: {
         flexDirection: 'row',
         alignItems: 'center',
+        justifyContent: 'center',
     },
     dot: {
-        borderWidth: 2,
         alignItems: 'center',
         justifyContent: 'center',
     },
-    dotCore: {},
     keypad: {
         alignItems: 'center',
     },
@@ -310,8 +305,12 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
     },
     keyText: {
-        fontSize: 28,
-        lineHeight: 34,
+        fontSize: 27,
+        lineHeight: 33,
         fontFamily: Typography.fontFamily.medium,
+    },
+    keyTextCompact: {
+        fontSize: 24,
+        lineHeight: 30,
     },
 });
