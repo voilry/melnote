@@ -48,10 +48,30 @@ jobs:
         working-directory: ./Melnote
         env:
           EAS_LOCAL_BUILD_SKIP_CLEANUP: 1
+          EAS_LOCAL_BUILD_WORKINGDIR: ${{ runner.temp }}/eas-local-build
           EXPO_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           EXPO_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           EXPO_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: eas build --platform android --profile preview --local --non-interactive --output ./build/melnote.apk
+
+      - name: Collect R8 mapping file
+        shell: bash
+        run: |
+          build_dir="${{ runner.temp }}/eas-local-build/build"
+          mapping_file="$build_dir/android/app/build/outputs/mapping/release/mapping.txt"
+
+          if [ ! -f "$mapping_file" ] && [ -d "$build_dir" ]; then
+            mapping_file="$(find "$build_dir" -type f -path '*/outputs/mapping/release/mapping.txt' -print -quit || true)"
+          fi
+
+          if [ -z "$mapping_file" ]; then
+            echo "::error::R8 mapping.txt was not generated in the EAS local build directory."
+            find "$build_dir" -type f -path '*mapping*' -print 2>/dev/null | head -50 || true
+            exit 1
+          fi
+
+          cp "$mapping_file" ./Melnote/build/mapping.txt
+          echo "Collected R8 mapping file from: $mapping_file"
 
       - name: Securely Delete Keystore
         if: always()
@@ -63,6 +83,6 @@ jobs:
           name: melnote-apk
           path: |
             ./Melnote/build/melnote.apk
-            ./Melnote/android/app/build/outputs/mapping/release/mapping.txt
-          if-no-files-found: warn
+            ./Melnote/build/mapping.txt
+          if-no-files-found: error
           retention-days: 7

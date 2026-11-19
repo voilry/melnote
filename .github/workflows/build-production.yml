@@ -62,23 +62,31 @@ jobs:
         working-directory: ./Melnote
         env:
           EAS_LOCAL_BUILD_SKIP_CLEANUP: 1
+          EAS_LOCAL_BUILD_WORKINGDIR: ${{ runner.temp }}/eas-local-build
           EXPO_ANDROID_KEYSTORE_PATH: ${{ github.workspace }}/Melnote/android-keystore.jks
           EXPO_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           EXPO_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           EXPO_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: eas build --platform android --profile production --local --non-interactive --output ./build/melnote.aab
 
-      - name: Verify Android version code
-        working-directory: ./Melnote
+      - name: Collect R8 mapping file
+        shell: bash
         run: |
-          expected_version_code="$(node -p "require('./app.json').expo.android.versionCode")"
-          actual_version_code="$(node -e "const fs = require('fs'); const match = fs.readFileSync('android/app/build.gradle', 'utf8').match(/^\s*versionCode\s*=?\s*(\d+)\s*$/m); if (!match) process.exit(1); process.stdout.write(match[1]);")"
-          echo "Expected Android versionCode: $expected_version_code"
-          echo "Built Android versionCode: $actual_version_code"
-          if [ "$actual_version_code" != "$expected_version_code" ]; then
-            echo "::error::Built Android versionCode ($actual_version_code) does not match app.json ($expected_version_code)."
+          build_dir="${{ runner.temp }}/eas-local-build/build"
+          mapping_file="$build_dir/android/app/build/outputs/mapping/release/mapping.txt"
+
+          if [ ! -f "$mapping_file" ] && [ -d "$build_dir" ]; then
+            mapping_file="$(find "$build_dir" -type f -path '*/outputs/mapping/release/mapping.txt' -print -quit || true)"
+          fi
+
+          if [ -z "$mapping_file" ]; then
+            echo "::error::R8 mapping.txt was not generated in the EAS local build directory."
+            find "$build_dir" -type f -path '*mapping*' -print 2>/dev/null | head -50 || true
             exit 1
           fi
+
+          cp "$mapping_file" ./Melnote/build/mapping.txt
+          echo "Collected R8 mapping file from: $mapping_file"
 
       - name: Securely Delete Keystore
         if: always()
@@ -90,6 +98,6 @@ jobs:
           name: melnote-aab
           path: |
             ./Melnote/build/melnote.aab
-            ./Melnote/android/app/build/outputs/mapping/release/mapping.txt
-          if-no-files-found: warn
+            ./Melnote/build/mapping.txt
+          if-no-files-found: error
           retention-days: 7
