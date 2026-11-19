@@ -68,6 +68,18 @@ jobs:
           EXPO_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: eas build --platform android --profile production --local --non-interactive --output ./build/melnote.aab
 
+      - name: Verify Android version code
+        working-directory: ./Melnote
+        run: |
+          expected_version_code="$(node -p "require('./app.json').expo.android.versionCode")"
+          actual_version_code="$(node -e "const fs = require('fs'); const match = fs.readFileSync('android/app/build.gradle', 'utf8').match(/^\s*versionCode\s*=?\s*(\d+)\s*$/m); if (!match) process.exit(1); process.stdout.write(match[1]);")"
+          echo "Expected Android versionCode: $expected_version_code"
+          echo "Built Android versionCode: $actual_version_code"
+          if [ "$actual_version_code" != "$expected_version_code" ]; then
+            echo "::error::Built Android versionCode ($actual_version_code) does not match app.json ($expected_version_code)."
+            exit 1
+          fi
+
       - name: Securely Delete Keystore
         if: always()
         run: rm -f ./Melnote/android-keystore.jks
