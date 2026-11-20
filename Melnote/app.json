@@ -16,7 +16,7 @@
         "backgroundColor": "#F8F3EB"
       },
       "package": "com.voilry.melnote",
-      "versionCode": 2
+      "versionCode": 3
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -24,6 +24,7 @@
     },
     "plugins": [
       "expo-router",
+      "./plugins/withOptionalPortraitFeature",
       "expo-sqlite",
       "expo-font",
       [
