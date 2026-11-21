@@ -1,13 +1,13 @@
 import React from 'react';
-import Animated, { useAnimatedStyle, withSpring } from 'react-native-reanimated';
-import { View, StyleSheet, ScrollView, TouchableOpacity, Platform } from 'react-native';
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
+import { View, StyleSheet, ScrollView, Pressable, Platform } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { ThemedView } from '../../components/ui/ThemedView';
 import { ThemedText } from '../../components/ui/ThemedText';
 import { useSettings, ThemeMode } from '../../store/SettingsContext';
 import { Colors } from '../../constants/Colors';
 import { DesignSystem } from '../../constants/DesignSystem';
-import { Sun, Moon, Compass, Cards, TextT, MagicWand, SelectionBackground, PaintBrush, ArrowUp, ArrowDown, List, ArrowsDownUp, Palette } from '@/components/ui/Icon';
+import { Sun, Moon, Compass, Cards, TextT, MagicWand, SelectionBackground, PaintBrush, ArrowUp, ArrowDown, List, ArrowsDownUp, Palette, Layout } from '@/components/ui/Icon';
 import { Card } from '../../components/ui/Card';
 import { useAppTheme } from '../../hooks/useAppTheme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -161,6 +161,31 @@ export default function AppearanceSettingsScreen() {
                                 theme={theme}
                             />
                         </View>
+                        {settings.peopleListStyle === 'gallery' && (
+                            <>
+                                <View style={[styles.separator, { backgroundColor: colors.border }]} />
+                                <View style={styles.paddingBox}>
+                                    <SettingRow
+                                        label="Grid Columns"
+                                        icon={<Layout size={20} color={colors.tint} />}
+                                        colors={colors}
+                                    />
+                                    <SegmentedSelection
+                                        options={[
+                                            { label: '2', value: 2 },
+                                            { label: '3', value: 3 }
+                                        ]}
+                                        selectedValue={Math.min(3, Math.max(2, settings.peopleGalleryColumns || 2))}
+                                        onValueChange={(v: number) => {
+                                            triggerHaptic();
+                                            updateSetting('peopleGalleryColumns', v);
+                                        }}
+                                        colors={colors}
+                                        theme={theme}
+                                    />
+                                </View>
+                            </>
+                        )}
                     </Card>
                 </Section>
 
@@ -238,7 +263,7 @@ export default function AppearanceSettingsScreen() {
                     <Card style={styles.card} padding="none">
                         <SettingRow
                             label="Acrylic Profiles"
-                            description="Enable blurred avatar backgrounds in profile"
+                            description="Avatar colours shape the profile background"
                             icon={<MagicWand size={20} color={colors.tint} />}
                             colors={colors}
                             style={styles.paddingBox}
@@ -433,24 +458,39 @@ function VisualSelection({ options, selectedValue, onValueChange, colors, theme,
 }
 
 function SegmentedSelection({ options, selectedValue, onValueChange, colors, theme }: any) {
-    const selectedIndex = options.findIndex((o: any) => o.value === selectedValue);
+    const selectedIndex = Math.max(0, options.findIndex((o: any) => o.value === selectedValue));
     const [width, setWidth] = React.useState(0);
+    const [ready, setReady] = React.useState(false);
+
+    // Skip the slide on mount: the pill should already be sitting in place.
+    React.useEffect(() => {
+        if (width > 0) setReady(true);
+    }, [width]);
 
     const pillStyle = useAnimatedStyle(() => {
         if (width === 0) return { opacity: 0 };
         const itemWidth = (width - 8) / options.length;
+        const target = selectedIndex * itemWidth;
         return {
             width: itemWidth,
             transform: [
-                { translateX: withSpring(selectedIndex * itemWidth, { damping: 20, stiffness: 240, mass: 0.8 }) }
+                {
+                    translateX: ready
+                        ? withTiming(target, { duration: 165, easing: Easing.out(Easing.cubic) })
+                        : target,
+                }
             ],
             opacity: 1
         };
     });
 
+    // Recessed track + raised pill. Hierarchy comes from fill contrast only -
+    // no shadows, no borders.
+    const trackColor = theme === 'dark' ? 'rgba(0,0,0,0.42)' : 'rgba(20,14,8,0.08)';
+
     return (
         <View
-            style={[styles.segmentedContainer, { backgroundColor: colors.surface, marginLeft: 32 }]}
+            style={[styles.segmentedContainer, { backgroundColor: trackColor, marginLeft: 32 }]}
             onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
         >
             {/* Sliding Background Pill */}
@@ -462,8 +502,8 @@ function SegmentedSelection({ options, selectedValue, onValueChange, colors, the
                         top: 4,
                         bottom: 4,
                         left: 4,
-                        backgroundColor: theme === 'dark' ? colors.tint + '40' : colors.tint,
-                        borderRadius: 7,
+                        backgroundColor: colors.surface,
+                        borderRadius: 8,
                     }
                 ]}
             />
@@ -471,26 +511,70 @@ function SegmentedSelection({ options, selectedValue, onValueChange, colors, the
             {options.map((opt: any, index: number) => {
                 const isSelected = index === selectedIndex;
                 return (
-                    <TouchableOpacity
+                    <SegmentOption
                         key={opt.label}
-                        activeOpacity={0.8}
+                        label={opt.label}
+                        selected={isSelected}
+                        colors={colors}
+                        theme={theme}
                         onPress={() => onValueChange(opt.value)}
-                        style={styles.segmentedOption}
-                    >
-                        <ThemedText style={[
-                            styles.segmentedText,
-                            {
-                                color: isSelected
-                                    ? (theme === 'dark' ? colors.tint : '#fff')
-                                    : colors.secondary
-                            }
-                        ]}>
-                            {opt.label}
-                        </ThemedText>
-                    </TouchableOpacity>
+                    />
                 );
             })}
         </View>
+    );
+}
+
+/**
+ * A segment label that pops on touch. The pop starts on press-in, so it never
+ * waits on the sliding pill.
+ */
+function SegmentOption({ label, selected, colors, theme, onPress }: any) {
+    const scale = useSharedValue(1);
+
+    const animatedStyle = useAnimatedStyle(() => ({
+        transform: [{ scale: scale.value }],
+    }));
+
+    const handlePressIn = () => {
+        scale.value = withTiming(0.9, { duration: 80, easing: Easing.out(Easing.quad) });
+    };
+
+    const handlePressOut = () => {
+        scale.value = withSequence(
+            withTiming(1.08, { duration: 90, easing: Easing.out(Easing.quad) }),
+            withTiming(1, { duration: 110, easing: Easing.inOut(Easing.quad) })
+        );
+    };
+
+    return (
+        <Pressable
+            onPress={onPress}
+            onPressIn={handlePressIn}
+            onPressOut={handlePressOut}
+            style={styles.segmentedOption}
+            accessibilityRole="button"
+            accessibilityState={{ selected }}
+        >
+            <Animated.Text
+                allowFontScaling={false}
+                maxFontSizeMultiplier={1}
+                style={[
+                    styles.segmentedText,
+                    {
+                        color: selected
+                            ? colors.text
+                            : (theme === 'dark' ? colors.textTertiary : colors.secondary),
+                        fontFamily: selected
+                            ? Typography.fontFamily.bold
+                            : Typography.fontFamily.semibold,
+                    },
+                    animatedStyle,
+                ]}
+            >
+                {label}
+            </Animated.Text>
+        </Pressable>
     );
 }
 
@@ -529,17 +613,16 @@ const styles = StyleSheet.create({
     },
     segmentedContainer: {
         flexDirection: 'row',
-        borderRadius: 10,
+        borderRadius: 12,
         padding: 4,
         marginTop: 12,
-        overflow: 'hidden',
     },
     segmentedOption: {
         flex: 1,
-        paddingVertical: 8,
+        paddingVertical: 11,
         alignItems: 'center',
         justifyContent: 'center',
-        borderRadius: 7,
+        borderRadius: 8,
     },
     segmentedText: {
         fontSize: 13,

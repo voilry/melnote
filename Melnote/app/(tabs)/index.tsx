@@ -1,4 +1,4 @@
-import { View, StyleSheet, FlatList, TouchableOpacity, Modal, TextInput, Platform, ScrollView, Dimensions, Alert, DeviceEventEmitter, Pressable, BackHandler } from 'react-native';
+import { View, StyleSheet, FlatList, TouchableOpacity, Modal, TextInput, Platform, ScrollView, Dimensions, Alert, DeviceEventEmitter, Pressable, BackHandler, DimensionValue } from 'react-native';
 import { KeyboardAwareScrollView, useKeyboardState } from 'react-native-keyboard-controller';
 import Animated, { FadeInDown, Layout, FadeIn, FadeOut, SlideInDown, FadeOutDown, ZoomIn, useSharedValue, useAnimatedScrollHandler, runOnJS, Easing } from 'react-native-reanimated';
 import { BlurView } from 'expo-blur';
@@ -685,26 +685,32 @@ export default function PeopleScreen() {
     }, [people, search, sortBy]);
 
     const isGallery = settings.peopleListStyle === 'gallery';
+    const galleryColumns = Math.min(3, Math.max(2, Math.round(settings.peopleGalleryColumns || 2)));
+    // 3-up needs a tighter gutter so the narrower tiles keep their size.
+    const galleryGutter = galleryColumns >= 3 ? 4 : 6;
+    const galleryItemWidth: DimensionValue = `${100 / galleryColumns}%`;
 
-    // The list remounts when gallery/dashboard mode flips (see key on the
-    // FlatList below); reset the scroll trackers so the first scroll after the
-    // switch doesn't compute against a stale offset and flash the wrong arrow.
+    // The list remounts when gallery/dashboard mode or the gallery column count
+    // flips (see key on the FlatList below); reset the scroll trackers so the
+    // first scroll after the switch doesn't compute against a stale offset and
+    // flash the wrong arrow.
     useEffect(() => {
         scrollY.value = 0;
         scrollDirection.value = 'up';
         isScrolling.value = false;
-    }, [isGallery, isDashboardActive]);
+    }, [isGallery, galleryColumns, isDashboardActive]);
 
     const renderItem = useCallback(({ item, index }: { item: Person, index: number }) => {
         if (isGallery) {
             return (
                 <Animated.View
                     entering={shouldAnimate ? FadeInDown.delay(Math.min(index, 5) * 55).duration(440).springify().damping(22).stiffness(160).mass(0.9) : undefined}
-                    style={{ flex: 1, minWidth: '45%', maxWidth: '48%', marginHorizontal: 6, marginBottom: 12 }}
+                    style={{ width: galleryItemWidth, paddingHorizontal: galleryGutter, marginBottom: 12 }}
                 >
                     <GalleryPersonCard
                         person={item}
                         colors={colors}
+                        columns={galleryColumns}
                         onPress={() => router.push(`/person/${item.id}`)}
                         onLongPress={() => handlePersonLongPress(item)}
                     />
@@ -725,7 +731,7 @@ export default function PeopleScreen() {
                 />
             </Animated.View>
         );
-    }, [colors, router, theme, isGallery, shouldAnimate, openAssignData]);
+    }, [colors, router, theme, isGallery, galleryColumns, galleryGutter, shouldAnimate, openAssignData]);
 
     return (
         <ThemedView style={[styles.container, { paddingTop: insets.top }]}>
@@ -771,9 +777,9 @@ export default function PeopleScreen() {
                     }
                 }}
                 data={isDashboardActive ? [] : filteredPeople}
-                key={isGallery && !isDashboardActive ? 'gallery-view' : 'list-view'}
-                numColumns={isGallery && !isDashboardActive ? 2 : 1}
-                columnWrapperStyle={isGallery && !isDashboardActive ? { marginHorizontal: -6, justifyContent: 'space-between' } : undefined}
+                key={isGallery && !isDashboardActive ? `gallery-view-${galleryColumns}` : 'list-view'}
+                numColumns={isGallery && !isDashboardActive ? galleryColumns : 1}
+                columnWrapperStyle={isGallery && !isDashboardActive ? { marginHorizontal: -galleryGutter, justifyContent: 'flex-start' } : undefined}
                 keyExtractor={(item, index) => `person-${item.id}-${index}`}
                 renderItem={renderItem}
                 contentContainerStyle={[
@@ -858,7 +864,7 @@ export default function PeopleScreen() {
                                         <ThemedText style={{ color: colors.secondary, marginLeft: 8, fontWeight: '600' }}>Back to Dashboard</ThemedText>
                                     </ScalePressable>
                                 )}
-                                <View style={[styles.searchSection, isGallery && { marginBottom: 6 }]}>
+                                <View style={styles.searchSection}>
                                     <View style={styles.searchRow}>
                                         <SearchBar
                                             value={search}
@@ -1464,7 +1470,7 @@ const styles = StyleSheet.create({
         ...DesignSystem.shadows.sm,
     },
     searchSection: {
-        marginBottom: 14,
+        marginBottom: 6,
     },
     searchRow: {
         flexDirection: 'row',

@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useRef } from 'react';
 import { View, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import { ThemedText } from '../ui/ThemedText';
 import { Avatar } from '../ui/Avatar';
@@ -9,6 +9,7 @@ import { Typography } from '../../constants/Typography';
 import { PencilSimple as Edit, Clock } from '@/components/ui/Icon';
 import type { Person } from '../../db/repositories/PersonRepository';
 import { useAppTheme } from '../../hooks/useAppTheme';
+import type { AcrylicPalette } from '../../utils/acrylic';
 
 import Animated, { interpolate, useAnimatedStyle, Extrapolation, SharedValue, ZoomIn, FadeInDown } from 'react-native-reanimated';
 import { ScalePressable } from '../ui/ScalePressable';
@@ -17,10 +18,22 @@ interface PersonHeaderProps {
     person: Person;
     onEdit: () => void;
     scrollY?: SharedValue<number>;
+    isAcrylic?: boolean;
+    acrylic: AcrylicPalette;
+    onNameBottomChange?: (bottom: number) => void;
 }
 
-export function PersonHeader({ person, onEdit, scrollY }: PersonHeaderProps) {
-    const { colors, theme } = useAppTheme();
+export function PersonHeader({ person, onEdit, scrollY, isAcrylic, acrylic, onNameBottomChange }: PersonHeaderProps) {
+    const { colors } = useAppTheme();
+    const headerOffset = useRef(0);
+    const nameOffset = useRef(0);
+    const nameHeight = useRef(0);
+
+    const publishNameBottom = () => {
+        onNameBottomChange?.(
+            headerOffset.current + nameOffset.current + nameHeight.current
+        );
+    };
 
     const avatarStyle = useAnimatedStyle(() => {
         if (!scrollY) return {};
@@ -42,7 +55,13 @@ export function PersonHeader({ person, onEdit, scrollY }: PersonHeaderProps) {
     });
 
     return (
-        <View style={styles.header}>
+        <View
+            style={styles.header}
+            onLayout={(event) => {
+                headerOffset.current = event.nativeEvent.layout.y;
+                publishNameBottom();
+            }}
+        >
             <Animated.View entering={ZoomIn.duration(260).springify().damping(22).stiffness(280).mass(0.7)}>
                 <Animated.View style={[styles.avatarWrapper, avatarStyle]}>
                     <Avatar
@@ -53,7 +72,15 @@ export function PersonHeader({ person, onEdit, scrollY }: PersonHeaderProps) {
                 </Animated.View>
             </Animated.View>
 
-            <Animated.View entering={FadeInDown.delay(20).duration(260).springify().damping(24).stiffness(280).mass(0.7)} style={{ alignItems: 'center' }}>
+            <Animated.View
+                entering={FadeInDown.delay(20).duration(260).springify().damping(24).stiffness(280).mass(0.7)}
+                style={{ alignItems: 'center' }}
+                onLayout={(event) => {
+                    nameOffset.current = event.nativeEvent.layout.y;
+                    nameHeight.current = event.nativeEvent.layout.height;
+                    publishNameBottom();
+                }}
+            >
                 <ThemedText type="display" style={styles.name}>{person.name}</ThemedText>
             </Animated.View>
 
@@ -76,7 +103,7 @@ export function PersonHeader({ person, onEdit, scrollY }: PersonHeaderProps) {
             </Animated.View>
 
             <Animated.View entering={FadeInDown.delay(50).duration(260).springify().damping(24).stiffness(280).mass(0.7)} style={styles.headerMeta}>
-                <View style={[styles.metaItem, { backgroundColor: colors.surface + '80', marginTop: -11 }]}>
+                <View style={[styles.metaItem, { backgroundColor: isAcrylic ? acrylic.chrome : colors.surface + '80', marginTop: -11 }]}>
                     <Clock size={12} color={colors.secondary} />
                     <ThemedText type="tiny" style={{ color: colors.secondary, marginLeft: 6, fontFamily: Typography.fontFamily.semibold }}>
                         Joined {new Date(person.createdAt).toLocaleDateString('default', { month: 'long', year: 'numeric' })}

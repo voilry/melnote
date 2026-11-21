@@ -14,11 +14,58 @@ interface GalleryPersonCardProps {
     colors: any;
     onPress: () => void;
     onLongPress?: () => void;
+    /** Cards per row. Tiles shrink on 3 columns, so type and spacing scale with them. */
+    columns?: number;
 }
 
-export const GalleryPersonCard = memo(({ person, colors, onPress, onLongPress }: GalleryPersonCardProps) => {
+interface CardMetrics {
+    radius: number;
+    pad: number;
+    nameSize: number;
+    pitchSize: number;
+    initialSize: number;
+    initialPadding: number;
+    pinSize: number;
+    pinPad: number;
+    aspectRatio: number;
+    pitchGap: number;
+}
+
+const getMetrics = (columns: number): CardMetrics => {
+    if (columns >= 3) {
+        return {
+            radius: 18,
+            pad: 11,
+            nameSize: 13,
+            pitchSize: 10,
+            initialSize: 30,
+            initialPadding: 28,
+            pinSize: 13,
+            pinPad: 4,
+            aspectRatio: 0.72,
+            pitchGap: -2,
+        };
+    }
+    return {
+        radius: 22,
+        pad: 14,
+        nameSize: 15,
+        pitchSize: 11,
+        initialSize: 40,
+        initialPadding: 40,
+        pinSize: 14,
+        pinPad: 6,
+        aspectRatio: 0.85,
+        pitchGap: -3,
+    };
+};
+
+export const GalleryPersonCard = memo(({ person, colors, onPress, onLongPress, columns = 2 }: GalleryPersonCardProps) => {
     const { theme } = useAppTheme();
     const initials = (person.name || '?').substring(0, 1).toUpperCase();
+    const metrics = getMetrics(columns);
+    // A one-line pitch is dropped only when the person has none.
+    const showPitch = !!person.elevatorPitch;
 
     // Original gradient logic from Avatar for consistency
     const getGradientColors = (str: string) => {
@@ -34,6 +81,29 @@ export const GalleryPersonCard = memo(({ person, colors, onPress, onLongPress }:
     };
     const gradientColors = getGradientColors(person.name || '?');
 
+    const textContainerStyle = [
+        styles.textContainer,
+        { bottom: metrics.pad, left: metrics.pad, right: metrics.pad },
+    ];
+    const nameStyle = [
+        styles.nameOverlay,
+        // ThemedText's default 24px line box would push the pitch away, so both
+        // lines get a tight box and the pair reads as one label.
+        { fontSize: metrics.nameSize, lineHeight: Math.round(metrics.nameSize * 1.3) },
+    ];
+    const pitchStyle = [
+        styles.pitchOverlay,
+        {
+            fontSize: metrics.pitchSize,
+            lineHeight: Math.round(metrics.pitchSize * 1.3),
+            marginTop: metrics.pitchGap,
+        },
+    ];
+    const pinStyle = [
+        styles.pinBadge,
+        { top: metrics.pad - 4, right: metrics.pad - 4, padding: metrics.pinPad },
+    ];
+
     return (
         <ScalePressable
             onPress={onPress}
@@ -43,9 +113,11 @@ export const GalleryPersonCard = memo(({ person, colors, onPress, onLongPress }:
                 {
                     backgroundColor: colors.surface,
                     borderWidth: 0,
+                    borderRadius: metrics.radius,
+                    aspectRatio: metrics.aspectRatio,
                 }
             ]}
-            innerStyle={{ borderRadius: 22 }}
+            innerStyle={{ borderRadius: metrics.radius }}
         >
             {person.avatarUri ? (
                 <>
@@ -59,17 +131,17 @@ export const GalleryPersonCard = memo(({ person, colors, onPress, onLongPress }:
                         style={StyleSheet.absoluteFill}
                         locations={[0.4, 0.68, 1]}
                     />
-                    <View style={styles.textContainer}>
-                        <ThemedText style={styles.nameOverlay} numberOfLines={1}>{person.name}</ThemedText>
-                        {!!person.elevatorPitch && (
-                            <ThemedText style={styles.pitchOverlay} numberOfLines={1}>
+                    <View style={textContainerStyle}>
+                        <ThemedText style={nameStyle} numberOfLines={1}>{person.name}</ThemedText>
+                        {showPitch && (
+                            <ThemedText style={pitchStyle} numberOfLines={1}>
                                 {person.elevatorPitch}
                             </ThemedText>
                         )}
                     </View>
                     {person.isPinned && (
-                        <View style={[styles.pinBadge, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
-                            <PushPin size={14} color="#fff" weight="fill" />
+                        <View style={[pinStyle, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+                            <PushPin size={metrics.pinSize} color="#fff" weight="fill" />
                         </View>
                     )}
                 </>
@@ -88,26 +160,26 @@ export const GalleryPersonCard = memo(({ person, colors, onPress, onLongPress }:
                         locations={[0.3, 0.6, 1]}
                     />
 
-                    <View style={styles.fallbackInitialWrapper}>
-                        <ThemedText style={styles.fallbackInitial}>
+                    <View style={[styles.fallbackInitialWrapper, { paddingBottom: metrics.initialPadding }]}>
+                        <ThemedText style={[styles.fallbackInitial, { fontSize: metrics.initialSize, lineHeight: metrics.initialSize * 1.5 }]}>
                             {initials}
                         </ThemedText>
                     </View>
 
-                    <View style={styles.textContainer}>
-                        <ThemedText style={styles.nameOverlay} numberOfLines={1}>
+                    <View style={textContainerStyle}>
+                        <ThemedText style={nameStyle} numberOfLines={1}>
                             {person.name}
                         </ThemedText>
-                        {!!person.elevatorPitch && (
-                            <ThemedText style={styles.pitchOverlay} numberOfLines={1}>
+                        {showPitch && (
+                            <ThemedText style={pitchStyle} numberOfLines={1}>
                                 {person.elevatorPitch}
                             </ThemedText>
                         )}
                     </View>
 
                     {person.isPinned && (
-                        <View style={[styles.pinBadge, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
-                            <PushPin size={14} color="#fff" weight="fill" />
+                        <View style={[pinStyle, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+                            <PushPin size={metrics.pinSize} color="#fff" weight="fill" />
                         </View>
                     )}
                 </View>

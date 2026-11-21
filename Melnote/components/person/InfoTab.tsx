@@ -16,7 +16,7 @@ import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useAppTheme } from '../../hooks/useAppTheme';
 import { Typography } from '../../constants/Typography';
-import { BlurView } from 'expo-blur';
+import type { AcrylicPalette } from '../../utils/acrylic';
 
 interface InfoTabProps {
     person: Person;
@@ -26,13 +26,12 @@ interface InfoTabProps {
     onEdit: () => void;
     onEditProfile: () => void;
     isAcrylic?: boolean;
+    acrylic: AcrylicPalette;
 }
 
-export function InfoTab({ person, age, relationships, allPeople, onEdit, onEditProfile, isAcrylic }: InfoTabProps) {
+export function InfoTab({ person, age, relationships, allPeople, onEdit, onEditProfile, isAcrylic, acrylic }: InfoTabProps) {
     const router = useRouter();
-    const { colors, hapticsEnabled, theme } = useAppTheme();
-
-    const acrylicBg = isAcrylic ? (theme === 'dark' ? 'rgba(0,0,0,0.45)' : `${colors.background}D9`) : undefined;
+    const { colors, hapticsEnabled } = useAppTheme();
 
     const getRelationDisplay = (rel: Relationship) => {
         const otherId = rel.sourcePersonId === person?.id ? rel.targetPersonId : rel.sourcePersonId;
@@ -48,14 +47,7 @@ export function InfoTab({ person, age, relationships, allPeople, onEdit, onEditP
     return (
         <>
             <Animated.View entering={FadeInDown.delay(160).duration(480).springify().damping(22).stiffness(110).mass(1.0)}>
-                <Card style={[styles.infoCard, isAcrylic && { backgroundColor: theme === 'dark' ? 'rgba(0,0,0,0.45)' : `${colors.background}80`, overflow: 'hidden', borderWidth: 0 }]}>
-                    {isAcrylic && (
-                        <BlurView
-                            intensity={40}
-                            tint={theme === 'dark' ? 'dark' : 'light'}
-                            style={StyleSheet.absoluteFill}
-                        />
-                    )}
+                <Card style={[styles.infoCard, isAcrylic && { backgroundColor: acrylic.panel, borderWidth: 0 }]}>
                     <View style={styles.sectionHeader}>
                         <ThemedText type="sectionHeader" style={styles.sectionTitle}>Details</ThemedText>
                     </View>
@@ -126,20 +118,13 @@ export function InfoTab({ person, age, relationships, allPeople, onEdit, onEditP
 
             <Animated.View entering={FadeInDown.delay(220).duration(480).springify().damping(22).stiffness(110).mass(1.0)}>
                 <ScalePressable
-                    style={[styles.relationshipCard, { backgroundColor: isAcrylic ? (theme === 'dark' ? 'rgba(0,0,0,0.45)' : `${colors.background}80`) : colors.card, overflow: 'hidden', borderWidth: 0 }]}
+                    style={[styles.relationshipCard, { backgroundColor: isAcrylic ? acrylic.panel : colors.card, borderWidth: 0 }]}
                     innerStyle={{ borderRadius: DesignSystem.radius.lg }}
                     scaleTo={0.94}
                     onPress={() => {
                         router.push(`/person/${person.id}/relations`);
                     }}
                 >
-                    {isAcrylic && (
-                        <BlurView
-                            intensity={40}
-                            tint={theme === 'dark' ? 'dark' : 'light'}
-                            style={StyleSheet.absoluteFill}
-                        />
-                    )}
                     <View style={styles.relLeft}>
                         <View style={styles.avatarStack}>
                             {relationships.slice(0, 3).map((rel, idx) => (
@@ -194,14 +179,7 @@ export function InfoTab({ person, age, relationships, allPeople, onEdit, onEditP
                     scale={false}
                     innerStyle={{ borderRadius: DesignSystem.radius.md }}
                 >
-                    <Card style={[styles.descCard, isAcrylic && { backgroundColor: theme === 'dark' ? 'rgba(0,0,0,0.45)' : `${colors.background}80`, overflow: 'hidden', borderWidth: 0 }]} padding="lg">
-                        {isAcrylic && (
-                            <BlurView
-                                intensity={40}
-                                tint={theme === 'dark' ? 'dark' : 'light'}
-                                style={StyleSheet.absoluteFill}
-                            />
-                        )}
+                    <Card style={[styles.descCard, isAcrylic && { backgroundColor: acrylic.panel, borderWidth: 0 }]} padding="lg">
                         {person.description ? (
                             <MarkdownText content={person.description} style={styles.descText} />
                         ) : (

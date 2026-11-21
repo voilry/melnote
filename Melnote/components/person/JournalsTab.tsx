@@ -12,7 +12,7 @@ import { BookOpen, Trash } from '@/components/ui/Icon';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useAppTheme } from '../../hooks/useAppTheme';
-import { BlurView } from 'expo-blur';
+import type { AcrylicPalette } from '../../utils/acrylic';
 import { markdownPreviewText } from '../../utils/markdownConverter';
 
 interface JournalsTabProps {
@@ -20,6 +20,7 @@ interface JournalsTabProps {
     personName: string;
     onDelete: (id: number) => void;
     isAcrylic?: boolean;
+    acrylic: AcrylicPalette;
 }
 
 const parseLocalDate = (dateStr: string) => {
@@ -32,7 +33,7 @@ const parseLocalDate = (dateStr: string) => {
 };
 
 // A single journal card.
-const JournalCard = memo(({ item, index, colors, router, isAcrylic, theme, renderRightActions }: any) => {
+const JournalCard = memo(({ item, index, colors, router, isAcrylic, acrylic, renderRightActions }: any) => {
     return (
         <Animated.View
             layout={Layout.springify().damping(26).stiffness(280)}
@@ -50,14 +51,7 @@ const JournalCard = memo(({ item, index, colors, router, isAcrylic, theme, rende
                     style={{ marginBottom: 16 }}
                     innerStyle={{ borderRadius: 16 }}
                 >
-                    <Card style={[{ borderRadius: 16, backgroundColor: isAcrylic ? (theme === 'dark' ? 'rgba(0,0,0,0.45)' : `${colors.background}80`) : colors.surface, overflow: 'hidden', borderWidth: 0 }]} padding="md">
-                        {isAcrylic && (
-                            <BlurView
-                                intensity={40}
-                                tint={theme === 'dark' ? 'dark' : 'light'}
-                                style={StyleSheet.absoluteFill}
-                            />
-                        )}
+                    <Card style={[{ borderRadius: 16, backgroundColor: isAcrylic ? acrylic.panel : colors.surface, borderWidth: 0 }]} padding="md">
                         <View style={styles.entryHeader}>
                             <View style={[styles.journalDateBadge, { backgroundColor: colors.tint + '15' }]}>
                                 <ThemedText type="tiny" style={{ color: colors.tint, fontWeight: '800' }}>
@@ -76,11 +70,9 @@ const JournalCard = memo(({ item, index, colors, router, isAcrylic, theme, rende
     );
 });
 
-export function JournalsTab({ journals, personName, onDelete, isAcrylic }: JournalsTabProps) {
+export function JournalsTab({ journals, personName, onDelete, isAcrylic, acrylic }: JournalsTabProps) {
     const router = useRouter();
-    const { colors, hapticsEnabled, theme } = useAppTheme();
-
-    const acrylicBg = isAcrylic ? (theme === 'dark' ? 'rgba(0,0,0,0.45)' : `${colors.background}D9`) : undefined;
+    const { colors, hapticsEnabled } = useAppTheme();
 
     const renderRightActions = (id: number, dragX: RNAnimated.AnimatedInterpolation<number>) => {
         const trans = dragX.interpolate({
@@ -134,7 +126,7 @@ export function JournalsTab({ journals, personName, onDelete, isAcrylic }: Journ
                         colors={colors}
                         router={router}
                         isAcrylic={isAcrylic}
-                        theme={theme}
+                        acrylic={acrylic}
                         renderRightActions={renderRightActions}
                     />
                 ))

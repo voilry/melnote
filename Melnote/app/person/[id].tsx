@@ -1,7 +1,7 @@
 
-import React, { useState, useCallback, useRef } from 'react';
-import { View, StyleSheet, ScrollView, Modal, Pressable, Platform, Image, InteractionManager } from 'react-native';
-import Animated, { FadeIn, FadeInDown, useSharedValue, useAnimatedScrollHandler, runOnJS, useAnimatedStyle, withSpring, Easing } from 'react-native-reanimated';
+import React, { useState, useCallback, useRef, useMemo } from 'react';
+import { View, StyleSheet, ScrollView, Modal, Pressable, Platform, InteractionManager } from 'react-native';
+import Animated, { FadeIn, FadeInDown, useSharedValue, useAnimatedScrollHandler, runOnJS, useAnimatedStyle, withSpring, Easing, Extrapolation, interpolate } from 'react-native-reanimated';
 import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
 import { ThemedView } from '../../components/ui/ThemedView';
 import { ThemedText } from '../../components/ui/ThemedText';
@@ -15,10 +15,14 @@ import { Trash, CaretLeft as ChevronLeft, DotsThree as MoreHorizontal, Info, Cha
 import { GroupRepository, Group } from '../../db/repositories/GroupRepository';
 import { useFocusEffect } from 'expo-router/react-navigation';
 import * as Haptics from 'expo-haptics';
-import { BlurView } from 'expo-blur';
+import { BlurTargetView, BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../hooks/useAppTheme';
 import { useSettings } from '../../store/SettingsContext';
+import { useAvatarVibe } from '../../hooks/useAvatarVibe';
+import { getAvatarVibe } from '../../utils/avatarVibe';
+import { getAcrylicPalette } from '../../utils/acrylic';
+import { AvatarAura } from '../../components/person/AvatarAura';
 
 // Extracted Components
 import { PersonHeader } from '../../components/person/PersonHeader';
@@ -95,6 +99,15 @@ export default function PersonDetailScreen() {
             setIsLoading(false);
             return;
         }
+
+        // Resolve the acrylic palette before the profile paints. Otherwise the
+        // screen renders with the fallback tint first and visibly recolours
+        // when extraction finishes a moment later.
+        if (settings.profileBlurBackground && p.avatarUri) {
+            await getAvatarVibe(p.avatarUri);
+            if (isStale()) return;
+        }
+
         setPerson(p);
         setIsLoading(false); // Unblock screen render instantly (~5ms)
 
@@ -133,7 +146,7 @@ export default function PersonDetailScreen() {
         } catch (error) {
             console.error('Error loading secondary tab data:', error);
         }
-    }, [id]);
+    }, [id, settings.profileBlurBackground]);
 
     useFocusEffect(
         useCallback(() => {
@@ -253,6 +266,15 @@ export default function PersonDetailScreen() {
         return age;
     };
 
+    const avatarVibeUri = settings.profileBlurBackground ? (person?.avatarUri ?? null) : null;
+    const avatarVibe = useAvatarVibe(avatarVibeUri);
+    const acrylic = useMemo(
+        () => getAcrylicPalette(colors, theme, avatarVibe),
+        [colors, theme, avatarVibe]
+    );
+
+    const blurTargetRef = useRef<View>(null);
+    const heroNameBottom = useSharedValue(300);
     const scrollY = useSharedValue(0);
     const headerVisibleSV = useSharedValue(false);
 
@@ -261,12 +283,41 @@ export default function PersonDetailScreen() {
             scrollY.value = event.contentOffset.y;
             // Shared-value guard: dispatch to JS exactly once per transition
             // instead of on every frame until the re-render commits.
-            const shouldShow = event.contentOffset.y > 220;
+            const shouldShow = event.contentOffset.y > 4;
             if (shouldShow !== headerVisibleSV.value) {
                 headerVisibleSV.value = shouldShow;
                 runOnJS(setHeaderVisible)(shouldShow);
             }
         },
+    });
+
+    // The header arrives continuously with the scroll, matching the Manage
+    // Group Members header: the material backdrop fades first, then the title
+    // settles into place from a short vertical offset.
+    const headerBackdropStyle = useAnimatedStyle(() => {
+        const revealY = heroNameBottom.value - (insets.top + 64);
+        return {
+            opacity: interpolate(
+                scrollY.value,
+                [revealY - 24, revealY + 36],
+                [0, 1],
+                Extrapolation.CLAMP
+            ),
+        };
+    });
+
+    const headerIdentityStyle = useAnimatedStyle(() => {
+        const revealY = heroNameBottom.value - (insets.top + 64);
+        const progress = interpolate(
+            scrollY.value,
+            [revealY, revealY + 44],
+            [0, 1],
+            Extrapolation.CLAMP
+        );
+        return {
+            opacity: progress,
+            transform: [{ translateY: interpolate(progress, [0, 1], [9, 0]) }],
+        };
     });
 
     const handleTabChange = (tab: any) => {
@@ -305,84 +356,35 @@ export default function PersonDetailScreen() {
 
     const age = getAge(person.birthdate);
 
+    const isAcrylic = settings.profileBlurBackground && !!person.avatarUri;
+
     return (
-        <ThemedView style={[styles.container, settings.profileBlurBackground && person.avatarUri && { backgroundColor: 'transparent' }]}>
+        <ThemedView style={[styles.container, isAcrylic && { backgroundColor: 'transparent' }]}>
             <Stack.Screen options={{ headerShown: false }} />
 
-            {settings.profileBlurBackground && person.avatarUri && (
-                <View style={StyleSheet.absoluteFill}>
-                    <Image
-                        source={{ uri: person.avatarUri }}
-                        style={[StyleSheet.absoluteFill, { opacity: theme === 'dark' ? 0.85 : 0.6 }]}
-                        resizeMode="cover"
-                        blurRadius={12}
-                    />
-                    <View style={[StyleSheet.absoluteFill, { backgroundColor: theme === 'dark' ? 'rgba(0,0,0,0.2)' : `${colors.tint}10` }]} />
-                </View>
-            )}
-
-            <View style={styles.topBarWrapper}>
-                <View
-                    style={[
-                        styles.topBar,
-                        {
-                            paddingTop: insets.top + 8,
-                            backgroundColor: headerVisible
-                                ? (theme === 'dark' ? `${colors.background}D9` : `${colors.background}E6`)
-                                : 'transparent'
-                        }
-                    ]}
-                >
-                    {headerVisible && (
-                        <BlurView
-                            intensity={theme === 'dark' ? 60 : 40}
-                            tint={theme === 'dark' ? 'dark' : 'default'}
-                            style={StyleSheet.absoluteFill}
-                            pointerEvents="none"
-                        />
-                    )}
-                    <View style={styles.topBarContent}>
-                        <ScalePressable
-                            style={styles.headerIconButton}
-                            onPress={() => {
-                                triggerHaptic();
-                                router.back();
-                            }}
-                            innerStyle={{ borderRadius: 22 }}
-                            hitSlop={{ top: 30, bottom: 30, left: 30, right: 30 }}
-                        >
-                            <ChevronLeft size={26} color={colors.text} />
-                        </ScalePressable>
-
-                        {headerVisible && (
-                            <Animated.View entering={FadeIn.duration(200)} style={{ flex: 1, height: 44, justifyContent: 'center' }}>
-                                <ThemedText style={styles.topBarTitle} numberOfLines={1}>{person.name}</ThemedText>
-                            </Animated.View>
-                        )}
-
-                        {!headerVisible && <View style={{ flex: 1 }} />}
-
-                        <ScalePressable
-                            style={styles.headerIconButton}
-                            onPress={() => setShowMoreMenu(true)}
-                            innerStyle={{ borderRadius: 22 }}
-                        >
-                            <MoreHorizontal size={24} color={colors.text} />
-                        </ScalePressable>
+            <BlurTargetView ref={blurTargetRef} style={StyleSheet.absoluteFill}>
+                {isAcrylic && acrylic.aura && (
+                    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+                        <AvatarAura aura={acrylic.aura} />
                     </View>
-                </View>
-            </View>
+                )}
 
-            <Animated.ScrollView
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={styles.scrollContent}
-                onScroll={scrollHandler}
-                scrollEventThrottle={16}
-            >
+                <Animated.ScrollView
+                    style={{ flex: 1 }}
+                    showsVerticalScrollIndicator={false}
+                    contentContainerStyle={styles.scrollContent}
+                    onScroll={scrollHandler}
+                    scrollEventThrottle={16}
+                >
                 <PersonHeader
                     person={person}
                     onEdit={() => setShowEditModal(true)}
                     scrollY={scrollY}
+                    isAcrylic={isAcrylic}
+                    acrylic={acrylic}
+                    onNameBottomChange={(bottom) => {
+                        heroNameBottom.value = bottom;
+                    }}
                 />
 
 
@@ -395,7 +397,8 @@ export default function PersonDetailScreen() {
                         getTabIcon={getTabIcon}
                         colors={colors}
                         theme={theme}
-                        isAcrylic={settings.profileBlurBackground && !!person.avatarUri}
+                        isAcrylic={isAcrylic}
+                        acrylic={acrylic}
                     />
                 </Animated.View>
 
@@ -408,7 +411,8 @@ export default function PersonDetailScreen() {
                             allPeople={allPeople}
                             onEdit={() => router.push(`/person/${person.id}/locations`)}
                             onEditProfile={() => setShowEditModal(true)}
-                            isAcrylic={settings.profileBlurBackground && !!person.avatarUri}
+                            isAcrylic={isAcrylic}
+                            acrylic={acrylic}
                         />
                     )}
 
@@ -418,7 +422,8 @@ export default function PersonDetailScreen() {
                             onAdd={openNewNote}
                             onDelete={handleDeleteEntry}
                             theme={theme}
-                            isAcrylic={settings.profileBlurBackground && !!person.avatarUri}
+                            isAcrylic={isAcrylic}
+                            acrylic={acrylic}
                         />
                     )}
 
@@ -427,7 +432,8 @@ export default function PersonDetailScreen() {
                             journals={journals}
                             personName={person.name}
                             onDelete={handleDeleteJournal}
-                            isAcrylic={settings.profileBlurBackground && !!person.avatarUri}
+                            isAcrylic={isAcrylic}
+                            acrylic={acrylic}
                         />
                     )}
 
@@ -439,7 +445,8 @@ export default function PersonDetailScreen() {
                             onEdit={(id: number) => router.push({ pathname: '/contact/[id]', params: { id: id } })}
                             theme={theme}
                             colors={colors}
-                            isAcrylic={settings.profileBlurBackground && !!person.avatarUri}
+                            isAcrylic={isAcrylic}
+                            acrylic={acrylic}
                         />
                     )}
                 </Animated.View>
@@ -453,9 +460,8 @@ export default function PersonDetailScreen() {
                         <ThemedText type="sectionHeader" style={{ fontSize: 16, marginBottom: 12, opacity: 0.7 }}>Groups</ThemedText>
                         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
                             {personGroups.map((g, idx) => {
-                                const isAcrylic = settings.profileBlurBackground && !!person.avatarUri;
-                                const groupAcrylicBg = isAcrylic 
-                                    ? (theme === 'dark' ? 'rgba(0,0,0,0.65)' : `${colors.tint}33`) 
+                                const groupAcrylicBg = isAcrylic
+                                    ? acrylic.accent
                                     : (theme === 'light' ? colors.surface : 'rgba(255,255,255,0.08)');
 
                                 return (
@@ -465,16 +471,9 @@ export default function PersonDetailScreen() {
                                     >
                                         <ScalePressable
                                             onPress={() => { }} // No action for now but tactile feel
-                                            style={[styles.groupChip, { backgroundColor: groupAcrylicBg, borderColor: 'transparent', paddingVertical: 6, paddingHorizontal: 12, overflow: 'hidden' }]}
+                                            style={[styles.groupChip, { backgroundColor: groupAcrylicBg, borderColor: 'transparent', paddingVertical: 6, paddingHorizontal: 12 }]}
                                             innerStyle={{ borderRadius: 12 }}
                                         >
-                                            {isAcrylic && (
-                                                <BlurView
-                                                    intensity={50}
-                                                    tint={theme === 'dark' ? 'dark' : 'light'}
-                                                    style={StyleSheet.absoluteFill}
-                                                />
-                                            )}
                                             {getGroupIcon(g.icon, colors.tint, 14)}
                                             <ThemedText style={{ fontSize: 13, color: colors.tint, fontWeight: '700', marginLeft: 6 }}>{g.name}</ThemedText>
                                         </ScalePressable>
@@ -484,7 +483,78 @@ export default function PersonDetailScreen() {
                         </View>
                     </Animated.View>
                 )}
-            </Animated.ScrollView>
+                </Animated.ScrollView>
+            </BlurTargetView>
+
+            <View pointerEvents="box-none" style={styles.topBarWrapper}>
+                <Animated.View
+                    pointerEvents="none"
+                    style={[StyleSheet.absoluteFill, headerBackdropStyle]}
+                >
+                    {headerVisible && (isAcrylic || Platform.OS === 'ios') && (
+                        <BlurView
+                            blurTarget={blurTargetRef}
+                            blurMethod={Platform.OS === 'android'
+                                ? (Platform.Version >= 31 ? 'dimezisBlurViewSdk31Plus' : 'dimezisBlurView')
+                                : undefined}
+                            blurReductionFactor={Platform.OS === 'android' ? 3 : undefined}
+                            intensity={theme === 'dark' ? 68 : 60}
+                            tint={theme === 'dark' ? 'systemChromeMaterialDark' : 'systemMaterialLight'}
+                            style={StyleSheet.absoluteFill}
+                            pointerEvents="none"
+                        />
+                    )}
+                    {!isAcrylic && (
+                        <View
+                            style={[
+                                StyleSheet.absoluteFill,
+                                {
+                                    backgroundColor: theme === 'dark'
+                                        ? `${colors.background}D9`
+                                        : `${colors.background}E6`,
+                                },
+                            ]}
+                        />
+                    )}
+                </Animated.View>
+
+                <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
+                    <View style={styles.topBarContent}>
+                        <ScalePressable
+                            style={styles.headerIconButton}
+                            onPress={() => {
+                                triggerHaptic();
+                                router.back();
+                            }}
+                            innerStyle={{ borderRadius: 22 }}
+                            hitSlop={{ top: 30, bottom: 30, left: 30, right: 30 }}
+                        >
+                            <ChevronLeft size={26} color={colors.text} />
+                        </ScalePressable>
+
+                        <View style={{ flex: 1 }} />
+
+                        <ScalePressable
+                            style={styles.headerIconButton}
+                            onPress={() => setShowMoreMenu(true)}
+                            innerStyle={{ borderRadius: 22 }}
+                        >
+                            <MoreHorizontal size={24} color={colors.text} />
+                        </ScalePressable>
+                    </View>
+                </View>
+
+                <Animated.View
+                    pointerEvents="none"
+                    style={[
+                        styles.topBarIdentity,
+                        { top: insets.top + 8, height: 42 },
+                        headerIdentityStyle,
+                    ]}
+                >
+                    <ThemedText style={styles.topBarTitle} numberOfLines={1}>{person.name}</ThemedText>
+                </Animated.View>
+            </View>
 
             <EditPersonModal
                 visible={showEditModal}
@@ -631,12 +701,13 @@ function ProfileTabBar({
     getTabIcon,
     colors,
     theme,
-    isAcrylic
+    isAcrylic,
+    acrylic
 }: any) {
     const [width, setWidth] = useState(0);
     const activeIndex = orderedTabs.findIndex((t: string) => (t === 'notes' ? 'entries' : t) === activeTab);
     const activeBg = isAcrylic
-        ? (theme === 'dark' ? 'rgba(0,0,0,0.45)' : `${colors.tint}18`)
+        ? acrylic.indicator
         : (theme === 'dark' ? colors.card : colors.surface);
 
     const pillStyle = useAnimatedStyle(() => {
@@ -663,9 +734,8 @@ function ProfileTabBar({
             style={[
                 styles.tabContainer,
                 isAcrylic ? {
-                    borderColor: theme === 'dark' ? 'rgba(255,255,255,0.1)' : `${colors.tint}15`,
                     overflow: 'hidden',
-                    backgroundColor: theme === 'dark' ? 'rgba(0,0,0,0.45)' : `${colors.surface}BF`,
+                    backgroundColor: acrylic.chrome,
                     borderWidth: 0,
                 } : {
                     backgroundColor: theme === 'dark' ? colors.surface : colors.card,
@@ -674,14 +744,6 @@ function ProfileTabBar({
             ]}
             onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
         >
-            {isAcrylic && (
-                <BlurView
-                    intensity={40}
-                    tint={theme === 'dark' ? 'dark' : 'default'}
-                    style={StyleSheet.absoluteFill}
-                />
-            )}
-
             {/* Material 3 Expressive Sliding Indicator Pill */}
             <Animated.View
                 style={[
@@ -738,6 +800,13 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         paddingHorizontal: 12,
         paddingBottom: 14,
+    },
+    topBarIdentity: {
+        position: 'absolute',
+        left: 62,
+        right: 62,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     topBarTitle: {
         fontSize: 17,

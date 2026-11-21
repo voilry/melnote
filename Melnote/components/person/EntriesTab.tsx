@@ -12,8 +12,8 @@ import { Typography } from '../../constants/Typography';
 import { Plus, FileText, MagnifyingGlass as Search, Sparkle as Sparkles, Coffee, House as Home, Briefcase, Airplane as Plane, Gift, Target, Tag, Trash, X } from '@/components/ui/Icon';
 import { useRouter } from 'expo-router';
 import { useAppTheme } from '../../hooks/useAppTheme';
-import { BlurView } from 'expo-blur';
 import { useKeyboardState } from 'react-native-keyboard-controller';
+import type { AcrylicPalette } from '../../utils/acrylic';
 
 interface EntriesTabProps {
     entries: any[];
@@ -21,9 +21,10 @@ interface EntriesTabProps {
     onDelete: (id: number) => void;
     theme: 'light' | 'dark';
     isAcrylic?: boolean;
+    acrylic: AcrylicPalette;
 }
 
-export function EntriesTab({ entries, onAdd, onDelete, theme, isAcrylic }: EntriesTabProps) {
+export function EntriesTab({ entries, onAdd, onDelete, theme, isAcrylic, acrylic }: EntriesTabProps) {
     const router = useRouter();
     const { colors } = useAppTheme();
     const keyboardVisible = useKeyboardState((state) => state.isVisible);
@@ -139,14 +140,7 @@ export function EntriesTab({ entries, onAdd, onDelete, theme, isAcrylic }: Entri
                 entering={FadeInDown.duration(260).springify().damping(26).stiffness(280).mass(0.7)}
                 style={styles.searchRow}
             >
-                <View style={[styles.searchContainer, { backgroundColor: isAcrylic ? (theme === 'dark' ? 'rgba(0,0,0,0.45)' : `${colors.background}80`) : colors.card, borderColor: isAcrylic ? 'transparent' : colors.border, overflow: 'hidden' }]}>
-                    {isAcrylic && (
-                        <BlurView
-                            intensity={40}
-                            tint={theme === 'dark' ? 'dark' : 'light'}
-                            style={StyleSheet.absoluteFill}
-                        />
-                    )}
+                <View style={[styles.searchContainer, { backgroundColor: isAcrylic ? acrylic.panelMuted : colors.card, borderColor: isAcrylic ? 'transparent' : colors.border }]}>
                     <Search size={16} color={colors.icon} style={{ marginRight: 8 }} />
                     <TextInput
                         placeholder="Search notes..."
@@ -215,14 +209,7 @@ export function EntriesTab({ entries, onAdd, onDelete, theme, isAcrylic }: Entri
                                         style={{ marginBottom: 12 }}
                                         innerStyle={{ borderRadius: 16 }}
                                     >
-                                        <Card style={[{ backgroundColor: isAcrylic ? (theme === 'dark' ? 'rgba(0,0,0,0.45)' : `${colors.background}80`) : colors.surface, borderRadius: 16, overflow: 'hidden', borderWidth: 0 }]} padding="md">
-                                            {isAcrylic && (
-                                                <BlurView
-                                                    intensity={40}
-                                                    tint={theme === 'dark' ? 'dark' : 'light'}
-                                                    style={StyleSheet.absoluteFill}
-                                                />
-                                            )}
+                                        <Card style={[{ backgroundColor: isAcrylic ? acrylic.panel : colors.surface, borderRadius: 16, borderWidth: 0 }]} padding="md">
                                             <View style={styles.entryMeta}>
                                                 {getCategoryIcon(entry.type)}
                                                 <ThemedText style={[styles.entryMetaType, { color: colors.secondary }]}>

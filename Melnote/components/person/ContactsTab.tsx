@@ -26,6 +26,7 @@ import {
 import { DesignSystem } from '../../constants/DesignSystem';
 import { Typography } from '../../constants/Typography';
 import { useAppTheme } from '../../hooks/useAppTheme';
+import type { AcrylicPalette } from '../../utils/acrylic';
 
 interface ContactMethod {
     id: number;
@@ -41,6 +42,7 @@ interface ContactsTabProps {
     theme: 'light' | 'dark';
     isAcrylic?: boolean;
     colors: any;
+    acrylic: AcrylicPalette;
 }
 
 const HERO_HEIGHT = 78;
@@ -311,7 +313,7 @@ function ContactActionModal({ contact, colors, onClose, onOpen }: ContactActionM
     );
 }
 
-export function ContactsTab({ contacts, onAdd, onDelete, onEdit, theme, isAcrylic, colors }: ContactsTabProps) {
+export function ContactsTab({ contacts, onAdd, onDelete, onEdit, isAcrylic, colors, acrylic }: ContactsTabProps) {
     const [showLinkError, setShowLinkError] = useState(false);
     const [selectedContact, setSelectedContact] = useState<ContactMethod | null>(null);
 
@@ -330,7 +332,7 @@ export function ContactsTab({ contacts, onAdd, onDelete, onEdit, theme, isAcryli
     }, [contactList, primaryContact]);
 
     const surfaceColor = isAcrylic
-        ? `${colors.card}${theme === 'dark' ? 'E6' : 'D9'}`
+        ? acrylic.panel
         : colors.card;
 
     const handleOpenContact = useCallback((platform: string, value: string) => {

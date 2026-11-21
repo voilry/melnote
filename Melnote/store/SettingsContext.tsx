@@ -17,6 +17,8 @@ interface Settings {
     profileBlurBackground: boolean;
     peopleTabMode: 'default' | 'discovery';
     peopleListStyle: 'list' | 'gallery';
+    /** How many gallery cards sit side by side. Only used when peopleListStyle is 'gallery'. */
+    peopleGalleryColumns: number;
     themePreset: string;
     editorFontSize: number;
     showJournalTab: boolean;
@@ -61,6 +63,7 @@ const DEFAULT_SETTINGS: Settings = {
     profileBlurBackground: false,
     peopleTabMode: 'default',
     peopleListStyle: 'list',
+    peopleGalleryColumns: 2,
     themePreset: 'default',
     editorFontSize: 16,
     showJournalTab: true,
@@ -127,6 +130,13 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
             if (stored.profileBlurBackground !== undefined) merged.profileBlurBackground = stored.profileBlurBackground === 'true';
             if (stored.peopleTabMode) merged.peopleTabMode = stored.peopleTabMode as 'default' | 'discovery';
             if (stored.peopleListStyle) merged.peopleListStyle = stored.peopleListStyle as 'list' | 'gallery';
+            if (stored.peopleGalleryColumns !== undefined) {
+                const columns = parseInt(stored.peopleGalleryColumns, 10);
+                // Only 2 and 3 are offered; a stored 4 from an older build clamps to 3.
+                merged.peopleGalleryColumns = Number.isFinite(columns) && columns >= 2
+                    ? Math.min(3, columns)
+                    : DEFAULT_SETTINGS.peopleGalleryColumns;
+            }
             if (stored.themePreset) merged.themePreset = stored.themePreset;
             if (stored.editorFontSize !== undefined) merged.editorFontSize = parseInt(stored.editorFontSize);
             if (stored.showJournalTab !== undefined) merged.showJournalTab = stored.showJournalTab === 'true';

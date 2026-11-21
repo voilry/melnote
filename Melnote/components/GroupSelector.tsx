@@ -439,6 +439,8 @@ export const GroupSelector = forwardRef<GroupSelectorHandle, GroupSelectorProps>
 
 const styles = StyleSheet.create({
     container: {
+        // A little breathing room under the search bar.
+        marginTop: 3,
         marginBottom: 4,
     },
     scrollContent: {
