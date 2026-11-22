@@ -29,3 +29,7 @@ Thumbs.db
 *.jks
 *.keystore
 *.b64
+
+# Tool / Agent worktrees
+.kilo/
+Melnote/.kilo/

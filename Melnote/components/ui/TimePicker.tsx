@@ -9,6 +9,7 @@ import { DesignSystem } from '../../constants/DesignSystem';
 import { ScalePressable } from './ScalePressable';
 import { useModalPresence } from './useModalPresence';
 import * as Haptics from 'expo-haptics';
+import { Typography } from '../../constants/Typography';
 
 interface TimePickerProps {
     value: string; // "HH:MM" (24h) or "hh:mm A" based on format
@@ -94,6 +95,7 @@ function WheelPicker({ items, value, onChange, width }: { items: { label: string
                 <RNAnimated.Text style={{
                     fontSize: 19,
                     fontWeight: '700',
+                    fontFamily: Typography.fontFamily.bold,
                     color: colors.text,
                     opacity,
                     transform: [{ scale }],

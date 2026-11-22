@@ -93,7 +93,7 @@ const PersonItem = memo(({ item, index, colors, theme, onPress, onLongPress }: a
                         style={[styles.personPitch, { color: colors.secondary }]}
                         numberOfLines={1}
                     >
-                        {item.elevatorPitch || 'No description added'}
+                        {item.elevatorPitch || 'No headline'}
                     </ThemedText>
                 </View>
                 {item.isPinned && (
@@ -966,13 +966,11 @@ export default function PeopleScreen() {
                             <ThemedText style={[styles.emptyTitle, { fontFamily: Typography.fontFamily.bold }]}>
                                 {search ? 'No results' : selectedGroupId ? 'Group Empty' : 'Network'}
                             </ThemedText>
-                            <ThemedText style={[styles.emptySubtitle, { color: colors.secondary }]}>
-                                {search
-                                    ? `No matches for "${search}"`
-                                    : selectedGroupId
-                                        ? 'Add members to this group.'
-                                        : 'Start adding people.'}
-                            </ThemedText>
+                            {search && (
+                                <ThemedText style={[styles.emptySubtitle, { color: colors.secondary }]}>
+                                    {`No matches for "${search}"`}
+                                </ThemedText>
+                            )}
                             {!search && !selectedGroupId && (
                                 <Button
                                     title="Add First Person"

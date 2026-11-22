@@ -1,0 +1,9 @@
+google play console flaged ;1 issue found
+We found some common issues that are preventing your app from being sent for review. You must address these issues before you can send your changes for review.
+Required hardware feature declarations are restricting your app's availability
+Your app declares a requirement for hardware features that are unsupported by some devices. Users on these devices can't install your app because of the following unsupported hardware features:
+
+android.hardware.screen.portrait affects Phone, Tablet, Desktop, and Android XR users
+
+To expand your app's availability, mark non-essential hardware features as optional in your app's manifest.
+My view ; well my app gets really messed up if someone sets higher screen size or font. Thats why I added that ,so phone own setting of larger display size wont mess with app , neither font size, idk if it was set perfectly for that case, coz I also want my app to work on other devices, but dont have this  display and font size increase or decrease effect my app or overide it

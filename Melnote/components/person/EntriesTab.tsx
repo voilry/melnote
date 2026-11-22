@@ -271,6 +271,7 @@ const styles = StyleSheet.create({
         flex: 1,
         fontSize: 15,
         fontWeight: '500',
+        fontFamily: Typography.fontFamily.medium,
     },
     addButton: {
         width: 48,

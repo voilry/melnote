@@ -149,6 +149,8 @@ export const UserIcon = User;
 export const ArrowUp = (props: any) => <Icon name={props.weight === 'fill' ? 'up_fill' : 'up_line'} {...props} />;
 export const ArrowDown = (props: any) => <Icon name={props.weight === 'fill' ? 'down_fill' : 'down_line'} {...props} />;
 export const List = (props: any) => <Icon name={props.weight === 'fill' ? 'list_check_fill' : 'list_check_line'} {...props} />;
+export const ListOrdered = (props: any) => <Icon name={props.weight === 'fill' ? 'list_ordered_fill' : 'list_ordered_line'} {...props} />;
+export const Checkbox = (props: any) => <Icon name={props.weight === 'fill' ? 'checkbox_fill' : 'checkbox_line'} {...props} />;
 export const ArrowsDownUp = (props: any) => <Icon name={props.weight === 'fill' ? 'transfer_fill' : 'transfer_line'} {...props} />;
 export const ChevronRight = CaretRight;
 export const ChevronLeft = CaretLeft;

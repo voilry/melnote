@@ -1,0 +1,7 @@
+A bug it found but left alone
+
+The “blank screen that blocks your taps” bug isn’t only in the lock. Any pop-up window (<Modal>) that’s open when you leave the app can come back blank and block touches. The app has 33 of these, and the lock fix covers only one. Fixing the other 32 is a bigger, riskier job, so the agent suggests doing it as a separate task. It may explain other glitches you’ve seen when leaving and returning to the app.
+
+suggested fix : It’s a workaround, but a reasonable one. The real bug is inside React Native itself: when the app returns from the background, an open pop-up doesn’t redraw properly and ends up blank but still blocking touches. Your agent can’t fix React Native, so it works around the bug instead.
+
+The trick is key={generation}. In React, changing a component’s key makes it throw away the old copy and build a brand new one. So each time you return to the app, the pop-up is rebuilt from scratch instead of reusing the broken one. It’s like closing and reopening a frozen window instead of trying to repair it.

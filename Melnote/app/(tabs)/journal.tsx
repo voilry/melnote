@@ -352,11 +352,11 @@ export default function JournalScreen() {
                             <ThemedText style={[styles.emptyTitle, { fontFamily: Typography.fontFamily.bold }]}>
                                 {searchQuery ? 'No results' : 'Journal'}
                             </ThemedText>
-                            <ThemedText style={[styles.emptySubtitle, { color: colors.secondary }]}>
-                                {searchQuery
-                                    ? `No matches for "${searchQuery}"`
-                                    : 'Start logging memories.'}
-                            </ThemedText>
+                            {searchQuery && (
+                                <ThemedText style={[styles.emptySubtitle, { color: colors.secondary }]}>
+                                    {`No matches for "${searchQuery}"`}
+                                </ThemedText>
+                            )}
                             {!searchQuery && (
                                 <Button
                                     title="Write First Journal"

@@ -6,6 +6,7 @@ import { Typography } from '../../constants/Typography';
 import { escapedMentionPatterns } from '../../utils/mentions';
 import { mediaUri } from '../../utils/media';
 import { ImageViewer, type ViewerImage } from './ImageViewer';
+import { Check } from './Icon';
 import { parseMarkdownImage, type ImageAlign, type MarkdownImageInfo } from '../../utils/markdownConverter';
 
 interface MarkdownTextProps {
@@ -24,6 +25,10 @@ interface MarkdownTextProps {
      * tint color (journal reader). Omitted elsewhere — plain text stays.
      */
     mentionNames?: string[];
+    /** Optional callback when a checklist item is toggled by user in reader. */
+    onToggleTask?: (lineIndex: number, newChecked: boolean) => void;
+    /** Optional callback when markdown content changes due to checklist toggling. */
+    onContentChange?: (newContent: string) => void;
 }
 
 /**
@@ -87,8 +92,35 @@ const MarkdownImage: React.FC<{ info: MarkdownImageInfo; onPress: () => void }> 
     );
 };
 
-export const MarkdownText: React.FC<MarkdownTextProps> = ({ content, style, paddingHorizontal = 0, mentionNames }) => {
-    const { colors } = useAppTheme();
+export const MarkdownText: React.FC<MarkdownTextProps> = ({
+    content,
+    style,
+    paddingHorizontal = 0,
+    mentionNames,
+    onToggleTask,
+    onContentChange,
+}) => {
+    const { colors, theme } = useAppTheme();
+    const isDark = theme === 'dark';
+    const tickColor = isDark ? '#000000' : '#ffffff';
+
+    const handleToggleTask = (lineIdx: number, currentlyChecked: boolean) => {
+        if (onToggleTask) {
+            onToggleTask(lineIdx, !currentlyChecked);
+        }
+        if (onContentChange) {
+            const rawLines = content.split(/\r\n|\r|\n/);
+            if (lineIdx >= 0 && lineIdx < rawLines.length) {
+                const targetLine = rawLines[lineIdx];
+                const updatedLine = targetLine.replace(
+                    /^(\s*([*\-]\s+)?)\[([ xX])\]/,
+                    `$1[${currentlyChecked ? ' ' : 'x'}]`
+                );
+                rawLines[lineIdx] = updatedLine;
+                onContentChange(rawLines.join('\n'));
+            }
+        }
+    };
 
     // Reader image paging: one shared viewer for every image in the entry.
     // The rendered lines, the image list and the line -> image-position map
@@ -183,6 +215,48 @@ export const MarkdownText: React.FC<MarkdownTextProps> = ({ content, style, padd
         }
 
 
+        // Handle Checkboxes (GFM: '- [ ] ', '- [x] ', '* [ ] ', '* [x] ', '[ ] ', '[x] ')
+        // MUST run BEFORE bullet list check so '- [ ] ' is recognized as a task, not bullet
+        const taskMatch = line.match(/^([*\-]\s+)?\[([ xX])\]\s*(.*)$/);
+        if (taskMatch) {
+            const isChecked = taskMatch[2].toLowerCase() === 'x';
+            const taskText = taskMatch[3];
+            return (
+                <View key={index} style={styles.listItem}>
+                    <Pressable
+                        onPress={() => handleToggleTask(index, isChecked)}
+                        hitSlop={8}
+                        disabled={!onToggleTask && !onContentChange}
+                        accessibilityRole="checkbox"
+                        accessibilityState={{ checked: isChecked }}
+                        style={[
+                            styles.checkbox,
+                            isChecked
+                                ? [styles.checkboxChecked, { backgroundColor: colors.tint, borderColor: colors.tint }]
+                                : { borderColor: colors.secondary },
+                        ]}
+                    >
+                        {isChecked && <Check size={11} color={tickColor} weight="bold" />}
+                    </Pressable>
+                    <ThemedText
+                        style={[
+                            styles.paragraph,
+                            { color: colors.text },
+                            isChecked && { opacity: 0.6, textDecorationLine: 'line-through' },
+                            style,
+                        ]}
+                    >
+                        {renderInline(taskText, [
+                            styles.paragraph,
+                            { color: colors.text },
+                            isChecked && { opacity: 0.6, textDecorationLine: 'line-through' },
+                            style,
+                        ])}
+                    </ThemedText>
+                </View>
+            );
+        }
+
         // Handle Bullets
         if (line.startsWith('- ') || line.startsWith('* ')) {
             return (
@@ -204,28 +278,6 @@ export const MarkdownText: React.FC<MarkdownTextProps> = ({ content, style, padd
                     <ThemedText style={{ color: colors.tint, marginRight: 8 }}>{orderedMatch[1]}.</ThemedText>
                     <ThemedText style={[styles.paragraph, { color: colors.text }, style]}>
                         {renderInline(orderedMatch[2], [styles.paragraph, { color: colors.text }, style])}
-                    </ThemedText>
-                </View>
-            );
-        }
-
-        // Handle Checkboxes
-        if (line.startsWith('[ ] ')) {
-            return (
-                <View key={index} style={styles.listItem}>
-                    <View style={[styles.checkbox, { borderColor: colors.secondary }]} />
-                    <ThemedText style={[styles.paragraph, { color: colors.text }, style]}>
-                        {renderInline(line.substring(4), [styles.paragraph, { color: colors.text }, style])}
-                    </ThemedText>
-                </View>
-            );
-        }
-        if (line.startsWith('[x] ') || line.startsWith('[X] ')) {
-            return (
-                <View key={index} style={styles.listItem}>
-                    <View style={[styles.checkbox, styles.checkboxChecked, { backgroundColor: colors.tint, borderColor: colors.tint }]} />
-                    <ThemedText style={[styles.paragraph, { color: colors.text, opacity: 0.6, textDecorationLine: 'line-through' }, style]}>
-                        {renderInline(line.substring(4), [styles.paragraph, { color: colors.text, opacity: 0.6, textDecorationLine: 'line-through' }, style])}
                     </ThemedText>
                 </View>
             );
@@ -429,6 +481,8 @@ const styles = StyleSheet.create({
         borderRadius: 4,
         marginRight: 10,
         marginTop: 4,
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     checkboxChecked: {
         justifyContent: 'center',

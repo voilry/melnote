@@ -445,6 +445,7 @@ const styles = StyleSheet.create({
         paddingVertical: 0,
         fontSize: 12,
         fontWeight: '500',
+        fontFamily: Typography.fontFamily.medium,
     },
     recommendedLabel: {
         fontSize: 11,

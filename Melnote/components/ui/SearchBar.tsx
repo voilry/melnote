@@ -3,6 +3,7 @@ import { View, TextInput, TouchableOpacity, StyleSheet, StyleProp, ViewStyle, Pl
 import { useAppTheme } from '../../hooks/useAppTheme';
 import { MagnifyingGlass as Search, X } from '@/components/ui/Icon';
 import { ScalePressable } from './ScalePressable';
+import { Typography } from '../../constants/Typography';
 
 interface SearchBarProps {
     value: string;
@@ -68,6 +69,7 @@ const styles = StyleSheet.create({
     searchInput: {
         flex: 1,
         fontSize: 16,
+        fontFamily: Typography.fontFamily.regular,
         paddingVertical: Platform.OS === 'ios' ? 12 : 8,
     },
     clearButton: {

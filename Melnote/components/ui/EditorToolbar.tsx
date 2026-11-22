@@ -3,11 +3,38 @@ import { View, ScrollView, TouchableOpacity, StyleSheet, Keyboard, Platform } fr
 import { ThemedText } from './ThemedText';
 import { useAppTheme } from '../../hooks/useAppTheme';
 import { Typography } from '../../constants/Typography';
-import { X, Quotes as Quote, Code, Undo, Redo, PhotoAlbum } from '@/components/ui/Icon';
+import { X, Quotes as Quote, Code, Undo, Redo, PhotoAlbum, Check, ListOrdered } from '@/components/ui/Icon';
 import type { EditorBridge } from '@10play/tentap-editor';
 import { useBridgeState } from '@10play/tentap-editor';
 import * as Haptics from 'expo-haptics';
 import { PhotoSourceSheet } from './PhotoSourceSheet';
+
+function BulletListIcon({ color }: { color: string }) {
+    return (
+        <View style={styles.bulletListIconWrapper}>
+            <View style={styles.bulletListRow}>
+                <View style={[styles.bulletDot, { backgroundColor: color }]} />
+                <View style={[styles.bulletLine, { backgroundColor: color }]} />
+            </View>
+            <View style={styles.bulletListRow}>
+                <View style={[styles.bulletDot, { backgroundColor: color }]} />
+                <View style={[styles.bulletLine, { backgroundColor: color }]} />
+            </View>
+            <View style={styles.bulletListRow}>
+                <View style={[styles.bulletDot, { backgroundColor: color }]} />
+                <View style={[styles.bulletLine, { backgroundColor: color }]} />
+            </View>
+        </View>
+    );
+}
+
+function ChecklistIcon({ color, active }: { color: string; active?: boolean }) {
+    return (
+        <View style={[styles.checkboxIconWrapper, { borderColor: color }, active && { backgroundColor: color + '20' }]}>
+            <Check size={10} color={color} weight="bold" />
+        </View>
+    );
+}
 
 interface EditorToolbarProps {
     editor: EditorBridge;
@@ -46,6 +73,7 @@ export function EditorToolbar({
     const isStrikeActive = bridgeState?.isStrikeActive;
     const headingLevel = bridgeState?.headingLevel;
     const isBulletActive = bridgeState?.isBulletListActive;
+    const isOrderedActive = bridgeState?.isOrderedListActive;
     const isTaskActive = bridgeState?.isTaskListActive;
     const isBlockquoteActive = bridgeState?.isBlockquoteActive;
     const isCodeActive = bridgeState?.isCodeActive;
@@ -285,6 +313,8 @@ export function EditorToolbar({
                 <TouchableOpacity 
                     onPress={() => handleAction(() => editor?.toggleBlockquote())} 
                     style={[styles.toolbarButton, isBlockquoteActive && { backgroundColor: colors.tint + '20', borderRadius: 8 }]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Quote"
                 >
                     <Quote size={18} color={isBlockquoteActive ? colors.tint : colors.text} />
                 </TouchableOpacity>
@@ -293,16 +323,30 @@ export function EditorToolbar({
                 <TouchableOpacity 
                     onPress={() => handleAction(() => editor?.toggleBulletList())} 
                     style={[styles.toolbarButton, isBulletActive && { backgroundColor: colors.tint + '20', borderRadius: 8 }]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Bullet list"
                 >
-                    <View style={[styles.bulletIcon, { borderColor: isBulletActive ? colors.tint : colors.text }]} />
+                    <BulletListIcon color={isBulletActive ? colors.tint : colors.text} />
+                </TouchableOpacity>
+
+                {/* Ordered List */}
+                <TouchableOpacity 
+                    onPress={() => handleAction(() => editor?.toggleOrderedList())} 
+                    style={[styles.toolbarButton, isOrderedActive && { backgroundColor: colors.tint + '20', borderRadius: 8 }]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Numbered list"
+                >
+                    <ListOrdered size={18} color={isOrderedActive ? colors.tint : colors.text} />
                 </TouchableOpacity>
 
                 {/* Task List / Checklist */}
                 <TouchableOpacity 
                     onPress={() => handleAction(() => editor?.toggleTaskList())} 
                     style={[styles.toolbarButton, isTaskActive && { backgroundColor: colors.tint + '20', borderRadius: 8 }]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Checklist"
                 >
-                    <View style={[styles.checkboxIcon, { borderColor: isTaskActive ? colors.tint : colors.text }]} />
+                    <ChecklistIcon color={isTaskActive ? colors.tint : colors.text} active={isTaskActive} />
                 </TouchableOpacity>
 
                 <View style={[styles.toolbarDivider, { backgroundColor: colors.border + '40' }]} />
@@ -379,18 +423,32 @@ const styles = StyleSheet.create({
         height: 20,
         marginHorizontal: 6,
     },
-    bulletIcon: {
-        width: 14,
-        height: 14,
-        borderLeftWidth: 2,
-        borderBottomWidth: 2,
-        opacity: 0.85,
+    bulletListIconWrapper: {
+        width: 16,
+        height: 13,
+        justifyContent: 'space-between',
     },
-    checkboxIcon: {
-        width: 15,
-        height: 15,
-        borderWidth: 1.8,
-        borderRadius: 3,
-        opacity: 0.85,
+    bulletListRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    bulletDot: {
+        width: 3,
+        height: 3,
+        borderRadius: 1.5,
+        marginRight: 4,
+    },
+    bulletLine: {
+        height: 1.8,
+        flex: 1,
+        borderRadius: 1,
+    },
+    checkboxIconWrapper: {
+        width: 16,
+        height: 16,
+        borderWidth: 1.6,
+        borderRadius: 4,
+        justifyContent: 'center',
+        alignItems: 'center',
     },
 });

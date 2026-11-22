@@ -43,105 +43,113 @@ export function ManageGroupsModal({ visible, onClose, personName, allGroups, per
             statusBarTranslucent
         >
             {showContent && (
-            <View style={styles.modalOverlay}>
-                <Animated.View
-                    entering={FadeIn.duration(240).easing(EASE_ENTER)}
-                    exiting={FadeOut.duration(220)}
-                    style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.5)' }]}
-                />
-                <Pressable style={{ flex: 1, justifyContent: 'flex-end' }} onPress={onClose}>
+                <View style={styles.modalOverlay}>
                     <Animated.View
-                        entering={SlideInDown.duration(360).easing(EASE_ENTER)}
-                        exiting={FadeOutDown.duration(260).easing(Easing.bezier(0.4, 0, 0.5, 1))}
-                        onStartShouldSetResponder={() => true}
-                        style={[
-                            styles.bottomSheet,
-                            {
-                                backgroundColor: colors.card,
-                                paddingBottom: 100 + insets.bottom + 28,
-                            }
-                        ]}
-                    >
-                        <View style={[styles.handle, { backgroundColor: colors.border }]} />
-                        <View style={styles.sheetHeader}>
-                            <ThemedText style={styles.sheetTitle}>Manage Groups</ThemedText>
-                            <ThemedText style={[styles.sheetSubtitle, { color: colors.textSecondary }]}>
-                                Add or remove {personName} from groups
-                            </ThemedText>
-                        </View>
-
-                        <ScrollView
-                            style={{ maxHeight: 440 }}
-                            showsVerticalScrollIndicator={false}
-                            contentContainerStyle={{ paddingBottom: 8 }}
+                        entering={FadeIn.duration(240).easing(EASE_ENTER)}
+                        exiting={FadeOut.duration(220)}
+                        style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.7)' }]}
+                    />
+                    <Pressable style={{ flex: 1, justifyContent: 'flex-end' }} onPress={onClose}>
+                        <Animated.View
+                            entering={SlideInDown.duration(360).easing(EASE_ENTER)}
+                            exiting={FadeOutDown.duration(260).easing(Easing.bezier(0.4, 0, 0.5, 1))}
+                            onStartShouldSetResponder={() => true}
+                            style={[
+                                styles.bottomSheet,
+                                {
+                                    backgroundColor: colors.card,
+                                    paddingBottom: 100 + insets.bottom + 32,
+                                }
+                            ]}
                         >
-                            {allGroups.length > 0 ? (
-                                allGroups.map((g, index) => {
-                                    const isSelected = personGroups.some(pg => pg.id === g.id);
-                                    const groupColor = g.color || colors.tint;
-                                    const IconComponent = getGroupIcon(g.icon);
+                            <View style={styles.handle} />
+                            <View style={styles.sheetHeader}>
+                                <ThemedText style={[styles.sheetTitle, { color: colors.text }]}>Manage Groups</ThemedText>
+                                <ThemedText type="small" style={[styles.sheetSubtitle, { color: colors.secondary }]}>
+                                    Add or remove {personName} from groups
+                                </ThemedText>
+                            </View>
 
-                                    return (
-                                        <Animated.View
-                                            key={g.id}
-                                            entering={FadeInDown.delay(60 + Math.min(index, 8) * 26)
-                                                .duration(300)
-                                                .easing(EASE_ENTER)}
-                                        >
-                                            <ScalePressable
-                                                style={styles.groupOption}
-                                                onPress={() => {
-                                                    triggerHaptic();
-                                                    onToggleGroup(g.id);
-                                                }}
-                                                scaleTo={0.985}
-                                                haptic={false}
-                                                accessibilityRole="button"
-                                                accessibilityLabel={`${g.name}, ${isSelected ? 'in group' : 'not in group'}`}
+                            <ScrollView
+                                style={{ maxHeight: 500 }}
+                                showsVerticalScrollIndicator={false}
+                                contentContainerStyle={{ paddingBottom: 20 }}
+                            >
+                                {allGroups.length > 0 ? (
+                                    allGroups.map((g, index) => {
+                                        const isSelected = personGroups.some(pg => pg.id === g.id);
+                                        const groupColor = g.color || colors.tint;
+                                        const IconComponent = getGroupIcon(g.icon);
+
+                                        return (
+                                            <Animated.View
+                                                key={g.id}
+                                                entering={FadeInDown.delay(60 + Math.min(index, 8) * 26)
+                                                    .duration(300)
+                                                    .easing(EASE_ENTER)}
                                             >
-                                                <View style={styles.groupIdentity}>
-                                                    <IconComponent
-                                                        size={22}
-                                                        color={isSelected ? groupColor : colors.textTertiary}
-                                                        weight="fill"
-                                                    />
-                                                    <ThemedText
-                                                        numberOfLines={1}
+                                                <ScalePressable
+                                                    style={[
+                                                        styles.groupOption,
+                                                        { backgroundColor: colors.surface },
+                                                    ]}
+                                                    onPress={() => {
+                                                        triggerHaptic();
+                                                        onToggleGroup(g.id);
+                                                    }}
+                                                    scaleTo={0.96}
+                                                    haptic={false}
+                                                    accessibilityRole="button"
+                                                    accessibilityLabel={`${g.name}, ${isSelected ? 'in group' : 'not in group'}`}
+                                                >
+                                                    <View style={styles.groupIdentity}>
+                                                        <IconComponent
+                                                            size={22}
+                                                            color={isSelected ? groupColor : colors.secondary}
+                                                            weight={isSelected ? 'fill' : 'regular'}
+                                                        />
+                                                        <ThemedText
+                                                            numberOfLines={1}
+                                                            style={[
+                                                                styles.groupName,
+                                                                {
+                                                                    color: isSelected ? colors.text : colors.secondary,
+                                                                    fontFamily: isSelected
+                                                                        ? Typography.fontFamily.bold
+                                                                        : Typography.fontFamily.medium,
+                                                                },
+                                                            ]}
+                                                        >
+                                                            {g.name}
+                                                        </ThemedText>
+                                                    </View>
+                                                    <View
                                                         style={[
-                                                            styles.groupName,
+                                                            styles.checkCircle,
                                                             {
-                                                                color: isSelected ? colors.text : colors.textSecondary,
-                                                                fontFamily: isSelected
-                                                                    ? Typography.fontFamily.semibold
-                                                                    : Typography.fontFamily.medium,
+                                                                backgroundColor: isSelected ? groupColor : 'transparent',
+                                                                borderColor: isSelected ? groupColor : colors.border,
                                                             },
                                                         ]}
                                                     >
-                                                        {g.name}
-                                                    </ThemedText>
-                                                </View>
-                                                {isSelected ? (
-                                                    <Check size={18} color={groupColor} weight="fill" />
-                                                ) : null}
-                                            </ScalePressable>
-                                        </Animated.View>
-                                    );
-                                })
-                            ) : (
-                                <View style={styles.emptyState}>
-                                    <Folder size={44} color={colors.textTertiary} weight="fill" />
-                                    <ThemedText style={[styles.emptyTitle, { color: colors.text }]}>
-                                        No groups yet
-                                    </ThemedText>
-                                    <ThemedText style={[styles.emptyBody, { color: colors.textSecondary }]}>
-                                        Create a group first, then add {personName} to it.
-                                    </ThemedText>
-                                </View>
-                            )}
-                        </ScrollView>
-                    </Animated.View>
-                </Pressable>
-            </View>
+                                                        {isSelected && <Check size={12} color="#fff" weight="bold" />}
+                                                    </View>
+                                                </ScalePressable>
+                                            </Animated.View>
+                                        );
+                                    })
+                                ) : (
+                                    <View style={styles.emptyState}>
+                                        <Folder size={64} color={colors.secondary + '4D'} />
+                                        <ThemedText style={[styles.emptyTitle, { color: colors.secondary }]}>
+                                            No groups created yet
+                                        </ThemedText>
+                                    </View>
+                                )}
+                            </ScrollView>
+                        </Animated.View>
+                    </Pressable>
+                </View>
             )}
         </Modal>
     );
@@ -155,74 +163,64 @@ const styles = StyleSheet.create({
     bottomSheet: {
         borderTopLeftRadius: 32,
         borderTopRightRadius: 32,
-        paddingHorizontal: 20,
-        paddingTop: 14,
+        paddingHorizontal: 24,
+        paddingTop: 24,
+        minHeight: 500,
         marginBottom: -100,
         ...DesignSystem.shadows.xl,
     },
     handle: {
-        width: 36,
-        height: 4,
-        borderRadius: 2,
+        width: 40,
+        height: 5,
+        backgroundColor: 'rgba(128,128,128,0.2)',
+        borderRadius: 2.5,
         alignSelf: 'center',
-        marginBottom: 16,
+        marginBottom: 24,
     },
     sheetHeader: {
-        marginBottom: 12,
+        marginBottom: 24,
     },
     sheetTitle: {
-        fontSize: 22,
-        lineHeight: 28,
-        letterSpacing: -0.3,
+        fontSize: 18,
         fontFamily: Typography.fontFamily.serif,
     },
     sheetSubtitle: {
-        marginTop: 3,
-        fontSize: 13,
-        lineHeight: 18,
-        fontFamily: Typography.fontFamily.regular,
+        marginTop: 4,
     },
     groupOption: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        paddingVertical: 12,
-        paddingHorizontal: 2,
-        minHeight: 50,
+        padding: 14,
+        borderRadius: DesignSystem.radius.lg,
+        marginBottom: 10,
     },
     groupIdentity: {
         flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 13,
-        paddingRight: 12,
+        gap: 16,
     },
     groupName: {
-        fontSize: 16,
-        lineHeight: 21,
-        letterSpacing: -0.1,
+        fontSize: 17,
+        lineHeight: 22,
         flexShrink: 1,
     },
-    emptyState: {
+    checkCircle: {
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        borderWidth: 2,
+        justifyContent: 'center',
         alignItems: 'center',
-        paddingTop: 40,
-        paddingBottom: 32,
-        paddingHorizontal: 20,
+    },
+    emptyState: {
+        paddingTop: 60,
+        alignItems: 'center',
     },
     emptyTitle: {
-        marginTop: 14,
-        fontSize: 20,
-        lineHeight: 26,
-        letterSpacing: -0.4,
+        marginTop: 16,
         textAlign: 'center',
-        fontFamily: Typography.fontFamily.serif,
-    },
-    emptyBody: {
-        marginTop: 6,
-        fontSize: 13,
-        lineHeight: 19,
-        textAlign: 'center',
-        maxWidth: 270,
-        fontFamily: Typography.fontFamily.regular,
+        fontSize: 16,
     },
 });

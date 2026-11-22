@@ -100,11 +100,13 @@ export default function PersonDetailScreen() {
             return;
         }
 
-        // Resolve the acrylic palette before the profile paints. Otherwise the
-        // screen renders with the fallback tint first and visibly recolours
-        // when extraction finishes a moment later.
+        // Pre-warm the acrylic palette if fast/cached, but never hold back
+        // the screen transition if cold extraction takes longer.
         if (settings.profileBlurBackground && p.avatarUri) {
-            await getAvatarVibe(p.avatarUri);
+            await Promise.race([
+                getAvatarVibe(p.avatarUri),
+                new Promise((resolve) => setTimeout(resolve, 35)),
+            ]);
             if (isStale()) return;
         }
 
@@ -364,9 +366,9 @@ export default function PersonDetailScreen() {
 
             <BlurTargetView ref={blurTargetRef} style={StyleSheet.absoluteFill}>
                 {isAcrylic && acrylic.aura && (
-                    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+                    <Animated.View entering={FadeIn.duration(300)} style={StyleSheet.absoluteFill} pointerEvents="none">
                         <AvatarAura aura={acrylic.aura} />
-                    </View>
+                    </Animated.View>
                 )}
 
                 <Animated.ScrollView

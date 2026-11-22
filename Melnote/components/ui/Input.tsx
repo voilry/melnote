@@ -1,6 +1,7 @@
 import { TextInput, StyleSheet, TextInputProps, View } from 'react-native';
 import { ThemedText } from './ThemedText';
 import { useAppTheme } from '../../hooks/useAppTheme';
+import { Typography } from '../../constants/Typography';
 
 interface InputProps extends TextInputProps {
     label?: string;
@@ -82,6 +83,7 @@ const styles = StyleSheet.create({
         paddingBottom: 0,
         fontSize: 14,
         fontWeight: '600',
+        fontFamily: Typography.fontFamily.semibold,
         textAlignVertical: 'center',
     },
     counter: {

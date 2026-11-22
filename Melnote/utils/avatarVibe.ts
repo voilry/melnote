@@ -126,12 +126,19 @@ async function extractAvatarVibe(uri: string): Promise<AvatarVibe | null> {
         ? saved.base64.slice(saved.base64.indexOf(',') + 1)
         : saved.base64;
 
-    const decoded = decodeJpeg(base64ToBytes(base64), {
-        useTArray: true,
-        formatAsRGBA: true,
-        maxResolutionInMP: 2,
-        maxMemoryUsageInMB: 8,
-    });
+    let decoded;
+    try {
+        decoded = decodeJpeg(base64ToBytes(base64), {
+            useTArray: true,
+            formatAsRGBA: true,
+            maxResolutionInMP: 2,
+            maxMemoryUsageInMB: 8,
+        });
+    } catch {
+        return null;
+    }
+
+    if (!decoded || !decoded.data) return null;
 
     return paletteFromPixels(decoded.data, decoded.width, decoded.height);
 }

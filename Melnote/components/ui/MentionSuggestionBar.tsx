@@ -4,6 +4,7 @@ import { ThemedText } from './ThemedText';
 import { Avatar } from './Avatar';
 import { ScalePressable } from './ScalePressable';
 import { useAppTheme } from '../../hooks/useAppTheme';
+import { Typography } from '../../constants/Typography';
 
 /**
  * Picking a chip closes the bar (the caret's @query goes away), so the chip
@@ -118,6 +119,7 @@ const styles = StyleSheet.create({
     chipText: {
         fontSize: 13,
         fontWeight: '600',
+        fontFamily: Typography.fontFamily.semibold,
     },
     hint: {
         marginBottom: 6,

@@ -6,6 +6,7 @@ import { escapedMentionPatterns } from '../../utils/mentions';
 import { IMAGE_TOOLS_JS } from './imageToolsScript';
 import { imageSelectionFromMessage, type ImageSelection } from '../../utils/imageSelection';
 import { logError } from '../../utils/errorLog';
+import { FIGTREE_FONT_CSS } from '../../constants/figtreeFonts';
 
 interface RichEditorProps {
     editor: EditorBridge;
@@ -101,8 +102,6 @@ export const RichEditor: React.FC<RichEditorProps> = ({
     const fs = (n: number) => n;
 
     const customCSS = `
-        @import url('https://fonts.googleapis.com/css2?family=Figtree:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,400;1,700&display=swap');
-
         :root {
             --melnote-tint: ${tintColor} !important;
             --melnote-text: ${textColor} !important;
@@ -244,8 +243,12 @@ export const RichEditor: React.FC<RichEditorProps> = ({
         li::marker { color: ${tintColor} !important; }
         li p { margin: 0 !important; display: inline !important; }
 
-        /* === TASK LIST — mirrors MarkdownText checkbox style === */
-        ul[data-type="taskList"] { list-style: none !important; padding-left: 0 !important; }
+        /* === TASK LIST — custom themed checkbox, mirrors MarkdownText checkbox style === */
+        ul[data-type="taskList"] {
+            list-style: none !important;
+            padding-left: 0 !important;
+            margin: 4px 0 !important;
+        }
         ul[data-type="taskList"] li {
             display: flex !important;
             align-items: flex-start !important;
@@ -258,18 +261,49 @@ export const RichEditor: React.FC<RichEditorProps> = ({
             user-select: none !important;
             display: inline-flex !important;
             align-items: center !important;
+            cursor: pointer !important;
+            flex-shrink: 0 !important;
         }
         ul[data-type="taskList"] li > label > input[type="checkbox"] {
+            -webkit-appearance: none !important;
+            appearance: none !important;
             width: 18px !important;
             height: 18px !important;
             border: 2px solid ${secondaryColor} !important;
             border-radius: 4px !important;
-            accent-color: ${tintColor} !important;
+            background-color: transparent !important;
+            outline: none !important;
+            cursor: pointer !important;
             margin: 0 !important;
-            -webkit-appearance: checkbox !important;
+            padding: 0 !important;
+            position: relative !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            box-sizing: border-box !important;
+            vertical-align: middle !important;
+            transition: background-color 0.15s ease, border-color 0.15s ease !important;
         }
-        ul[data-type="taskList"] li > div { flex: 1 !important; line-height: ${baseLineHeight}px !important; }
-        ul[data-type="taskList"] li[data-checked="true"] > div {
+        ul[data-type="taskList"] li > label > input[type="checkbox"]:checked {
+            background-color: ${tintColor} !important;
+            border-color: ${tintColor} !important;
+        }
+        ul[data-type="taskList"] li > label > input[type="checkbox"]:checked::after {
+            content: '' !important;
+            display: block !important;
+            width: 4px !important;
+            height: 8px !important;
+            border: solid ${isDark ? '#000000' : '#ffffff'} !important;
+            border-width: 0 2px 2px 0 !important;
+            transform: rotate(45deg) !important;
+            margin-bottom: 2px !important;
+        }
+        ul[data-type="taskList"] li > div {
+            flex: 1 !important;
+            line-height: ${baseLineHeight}px !important;
+        }
+        ul[data-type="taskList"] li[data-checked="true"] > div,
+        ul[data-type="taskList"] li[data-checked="true"] > div > p {
             text-decoration: line-through !important;
             opacity: 0.6 !important;
         }
@@ -1437,6 +1471,7 @@ export const RichEditor: React.FC<RichEditorProps> = ({
 
     const handleLoad = useCallback(() => {
         if (!editor) return;
+        editor.injectCSS(FIGTREE_FONT_CSS, 'melnote-fonts');
         editor.injectCSS(resolvedCSS, 'melnote-theme');
         // Re-seed the @mention payload BEFORE enhanceJS boots. The page just
         // navigated (a fresh load or iOS's second navigation), so anything the
@@ -1452,6 +1487,14 @@ export const RichEditor: React.FC<RichEditorProps> = ({
         editor.injectJS(IMAGE_TOOLS_JS);
         syncExpectedDoc();
     }, [editor, resolvedCSS, enhanceJS, pushMentionNames, syncExpectedDoc]);
+
+    useEffect(() => {
+        editor?.injectCSS(FIGTREE_FONT_CSS, 'melnote-fonts');
+    }, [editor]);
+
+    useEffect(() => {
+        editor?.injectCSS(resolvedCSS, 'melnote-theme');
+    }, [editor, resolvedCSS]);
 
     return (
         <View

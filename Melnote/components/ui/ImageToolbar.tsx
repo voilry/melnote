@@ -730,6 +730,7 @@ const styles = StyleSheet.create({
         fontSize: 15,
         minHeight: 46,
         paddingVertical: 10,
+        fontFamily: Typography.fontFamily.regular,
     },
     clearBtn: {
         padding: 6,

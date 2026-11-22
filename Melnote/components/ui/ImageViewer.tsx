@@ -10,6 +10,7 @@ import Animated, {
     withTiming,
 } from 'react-native-reanimated';
 import { X } from './Icon';
+import { Typography } from '../../constants/Typography';
 
 export interface ViewerImage {
     uri: string;
@@ -392,6 +393,7 @@ const styles = StyleSheet.create({
         color: 'rgba(255, 255, 255, 0.85)',
         fontSize: 12,
         fontWeight: '600',
+        fontFamily: Typography.fontFamily.semibold,
     },
     captionWrap: {
         position: 'absolute',
@@ -404,6 +406,7 @@ const styles = StyleSheet.create({
         color: 'rgba(255, 255, 255, 0.9)',
         fontSize: 14,
         lineHeight: 20,
+        fontFamily: Typography.fontFamily.regular,
         textAlign: 'center',
     },
 });

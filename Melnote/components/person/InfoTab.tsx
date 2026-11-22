@@ -57,7 +57,7 @@ export function InfoTab({ person, age, relationships, allPeople, onEdit, onEditP
                         icon={<User size={18} color={colors.icon} weight="fill" />}
                         placeholder={
                             <ScalePressable onPress={onEditProfile} overlayColor="transparent">
-                                <ThemedText style={{ color: colors.tint, fontWeight: '600', fontSize: 14 }}>+ Add Gender</ThemedText>
+                                <ThemedText style={{ color: colors.tint, fontWeight: '600', fontSize: 14 }}>+ Add</ThemedText>
                             </ScalePressable>
                         }
                     />
@@ -68,7 +68,7 @@ export function InfoTab({ person, age, relationships, allPeople, onEdit, onEditP
                         icon={<Calendar size={18} color={colors.icon} weight="fill" />}
                         placeholder={
                             <ScalePressable onPress={onEditProfile} overlayColor="transparent">
-                                <ThemedText style={{ color: colors.tint, fontWeight: '600', fontSize: 14 }}>+ Add Birthday</ThemedText>
+                                <ThemedText style={{ color: colors.tint, fontWeight: '600', fontSize: 14 }}>+ Add</ThemedText>
                             </ScalePressable>
                         }
                     />
@@ -78,7 +78,7 @@ export function InfoTab({ person, age, relationships, allPeople, onEdit, onEditP
                         icon={<Clock size={18} color={colors.icon} weight="fill" />}
                         placeholder={
                             <ScalePressable onPress={onEditProfile} overlayColor="transparent">
-                                <ThemedText style={{ color: colors.tint, fontWeight: '600', fontSize: 14 }}>+ Set Date</ThemedText>
+                                <ThemedText style={{ color: colors.tint, fontWeight: '600', fontSize: 14 }}>+ Set</ThemedText>
                             </ScalePressable>
                         }
                     />
@@ -107,7 +107,7 @@ export function InfoTab({ person, age, relationships, allPeople, onEdit, onEditP
                                     </View>
                                 ) : (
                                     <ScalePressable onPress={() => router.push(`/person/${person.id}/locations`)} overlayColor="transparent">
-                                        <ThemedText style={{ color: colors.tint, fontWeight: '600', fontSize: 13 }}>+ Add Location</ThemedText>
+                                        <ThemedText style={{ color: colors.tint, fontWeight: '600', fontSize: 13 }}>+ Add</ThemedText>
                                     </ScalePressable>
                                 )}
                             </View>

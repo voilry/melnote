@@ -7,6 +7,7 @@ import { DesignSystem } from '../../constants/DesignSystem';
 import * as Haptics from 'expo-haptics';
 import { BlurView } from 'expo-blur';
 import { ScalePressable } from './ScalePressable';
+import { Typography } from '../../constants/Typography';
 
 interface QuickActionFABProps {
     onNewPerson: () => void;
@@ -155,5 +156,6 @@ const styles = StyleSheet.create({
     labelText: {
         fontSize: 14,
         fontWeight: '600',
+        fontFamily: Typography.fontFamily.semibold,
     }
 });

@@ -303,16 +303,18 @@ export function markdownToHtml(markdown: string): string {
                 inBlockquote = false;
             }
 
-            // Task List
-            if (trimmed.startsWith('[ ] ') || trimmed.startsWith('[x] ') || trimmed.startsWith('[X] ')) {
-                const isChecked = trimmed.startsWith('[x] ') || trimmed.startsWith('[X] ');
-                const taskText = trimmed.substring(4);
+            // Task List (GFM: '- [ ] ', '- [x] ', '* [ ] ', '* [x] ', '[ ] ', '[x] ')
+            // Must be matched BEFORE bullet list so '- [ ] ' is recognized as a task item
+            const taskMatch = trimmed.match(/^([*\-]\s+)?\[([ xX])\]\s*(.*)$/);
+            if (taskMatch) {
+                const isChecked = taskMatch[2].toLowerCase() === 'x';
+                const taskText = taskMatch[3];
                 if (!inTaskList) {
                     closeLists();
                     htmlLines.push('<ul data-type="taskList">');
                     inTaskList = true;
                 }
-                htmlLines.push(`<li data-type="taskItem" data-checked="${isChecked}"><p>${convertInline(taskText)}</p></li>`);
+                htmlLines.push(`<li data-type="taskItem" data-checked="${isChecked}"><label><input type="checkbox"${isChecked ? ' checked="checked"' : ''}><span></span></label><div><p>${convertInline(taskText)}</p></div></li>`);
                 continue;
             }
 
@@ -423,28 +425,50 @@ export function htmlToMarkdown(html: string): string {
     // thematic break surrounded by blank lines.
     md = md.replace(/<\s*hr\b[^>]*>/gi, '\n\n---\n\n');
 
-    // Task list items
-    md = md.replace(/<li[^>]*data-type="taskItem"[^>]*data-checked="true"[^>]*>([\s\S]*?)<\/li>/gi, (_, content) => {
-        const clean = content.replace(/<p[^>]*>([\s\S]*?)<\/p>/gi, '$1').trim();
-        return `[x] ${clean}\n`;
+    // Task lists — must be processed before generic <ul> lists
+    md = md.replace(/<ul\b[^>]*data-type="taskList"[^>]*>([\s\S]*?)<\/ul>/gi, (_, listContent) => {
+        let taskItems = '';
+        const itemRegex = /<li\b[^>]*data-type="taskItem"[^>]*>([\s\S]*?)<\/li>/gi;
+        let itemMatch;
+        while ((itemMatch = itemRegex.exec(listContent)) !== null) {
+            const fullLi = itemMatch[0];
+            const liContent = itemMatch[1];
+            const isChecked = /data-checked="true"/i.test(fullLi) || /<input[^>]*\bchecked\b/i.test(liContent);
+            const text = liContent
+                .replace(/<label\b[\s\S]*?<\/label>/gi, '')
+                .replace(/<input\b[^>]*>/gi, '')
+                .replace(/<p\b[^>]*>([\s\S]*?)<\/p>/gi, '$1')
+                .replace(/<div\b[^>]*>([\s\S]*?)<\/div>/gi, '$1')
+                .trim();
+            taskItems += `- [${isChecked ? 'x' : ' '}] ${text}\n`;
+        }
+        return `\n\n${taskItems}\n\n`;
     });
-    md = md.replace(/<li[^>]*data-type="taskItem"[^>]*data-checked="false"[^>]*>([\s\S]*?)<\/li>/gi, (_, content) => {
-        const clean = content.replace(/<p[^>]*>([\s\S]*?)<\/p>/gi, '$1').trim();
-        return `[ ] ${clean}\n`;
+
+    // Fallback for any orphaned taskItem not inside ul[data-type="taskList"]
+    md = md.replace(/<li\b[^>]*data-type="taskItem"[^>]*>([\s\S]*?)<\/li>/gi, (fullLi, liContent) => {
+        const isChecked = /data-checked="true"/i.test(fullLi) || /<input[^>]*\bchecked\b/i.test(liContent);
+        const text = liContent
+            .replace(/<label\b[\s\S]*?<\/label>/gi, '')
+            .replace(/<input\b[^>]*>/gi, '')
+            .replace(/<p\b[^>]*>([\s\S]*?)<\/p>/gi, '$1')
+            .replace(/<div\b[^>]*>([\s\S]*?)<\/div>/gi, '$1')
+            .trim();
+        return `- [${isChecked ? 'x' : ' '}] ${text}\n`;
     });
 
     // Lists
     md = md.replace(/<ul[^>]*>([\s\S]*?)<\/ul>/gi, (_, items) => {
-        return items.replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, (__: any, c: string) => {
+        return '\n' + items.replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, (__: any, c: string) => {
             const clean = c.replace(/<p[^>]*>([\s\S]*?)<\/p>/gi, '$1').trim();
-            if (clean.startsWith('[ ]') || clean.startsWith('[x]')) return `${clean}\n`;
+            if (clean.startsWith('[ ]') || clean.startsWith('[x]') || clean.startsWith('- [ ]') || clean.startsWith('- [x]')) return `${clean}\n`;
             return `- ${clean}\n`;
         }) + '\n';
     });
 
     md = md.replace(/<ol[^>]*>([\s\S]*?)<\/ol>/gi, (_, items) => {
         let idx = 1;
-        return items.replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, (__: any, c: string) => {
+        return '\n' + items.replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, (__: any, c: string) => {
             const clean = c.replace(/<p[^>]*>([\s\S]*?)<\/p>/gi, '$1').trim();
             return `${idx++}. ${clean}\n`;
         }) + '\n';
@@ -452,8 +476,14 @@ export function htmlToMarkdown(html: string): string {
 
     // Blockquotes
     md = md.replace(/<blockquote[^>]*>([\s\S]*?)<\/blockquote>/gi, (_, content) => {
-        const clean = content.replace(/<p[^>]*>([\s\S]*?)<\/p>/gi, '$1\n').trim();
-        return `> ${clean}\n\n`;
+        const lines = content
+            .replace(/<p[^>]*>([\s\S]*?)<\/p>/gi, '$1\n')
+            .trim()
+            .split(/\r?\n/)
+            .map((l: string) => l.trim())
+            .filter(Boolean);
+        const quoted = lines.map((l: string) => `> ${l}`).join('\n');
+        return `\n\n${quoted}\n\n`;
     });
 
     // Paragraphs & Line Breaks

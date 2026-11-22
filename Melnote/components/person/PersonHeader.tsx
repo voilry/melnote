@@ -93,8 +93,7 @@ export function PersonHeader({ person, onEdit, scrollY, isAcrylic, acrylic, onNa
                     ) : (
                         <ScalePressable
                             onPress={onEdit}
-                            scale={false}
-                            style={{ paddingVertical: 4 }}
+                            overlayColor="transparent"
                         >
                             <ThemedText style={{ color: colors.tint, fontSize: 16, fontWeight: '600' }}>+ Add headline</ThemedText>
                         </ScalePressable>

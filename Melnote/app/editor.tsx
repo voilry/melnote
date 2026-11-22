@@ -313,6 +313,29 @@ export default function EditorScreen() {
         }
     };
 
+    const handleReaderContentChange = useCallback(async (newMarkdown: string) => {
+        setContent(newMarkdown);
+        setOriginalContent(newMarkdown);
+        setEditorHtml(markdownToHtml(newMarkdown));
+
+        if (hapticsEnabled && Platform.OS !== 'web') {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        }
+
+        if (id && !isNewEntry) {
+            try {
+                if (type === 'description') {
+                    await PersonRepository.update(Number(id), { description: newMarkdown });
+                } else if (type === 'entry') {
+                    await EntryRepository.updateWithType(Number(id), newMarkdown, title.trim() || originalTitle);
+                }
+                setLastUpdated(new Date());
+            } catch (error) {
+                console.error('Failed to auto-save checklist toggle in reader:', error);
+            }
+        }
+    }, [id, isNewEntry, type, title, originalTitle, hapticsEnabled]);
+
     const handleBack = () => {
         if (isEditing) {
             if (hasChanges) {
@@ -536,6 +559,7 @@ export default function EditorScreen() {
                                     <MarkdownText
                                         content={content}
                                         paddingHorizontal={20}
+                                        onContentChange={handleReaderContentChange}
                                         style={{
                                             fontSize: settings.editorFontSize || 15,
                                             lineHeight: Math.round((settings.editorFontSize || 15) * 1.5)

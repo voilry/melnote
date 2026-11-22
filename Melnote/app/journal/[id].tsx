@@ -417,6 +417,28 @@ export default function JournalEditorScreen() {
         }
     };
 
+    const handleReaderContentChange = useCallback(async (newMarkdown: string) => {
+        setContent(newMarkdown);
+        setOriginalContent(newMarkdown);
+        setEditorHtml(markdownToHtml(newMarkdown));
+
+        if (hapticsEnabled && Platform.OS !== 'web') {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        }
+
+        if (journalId && id !== 'new') {
+            try {
+                await JournalRepository.update(journalId, newMarkdown, (title || journal?.title) ?? undefined);
+                const updated = await JournalRepository.getById(journalId);
+                if (updated) {
+                    setJournal(updated);
+                }
+            } catch (error) {
+                console.error('Failed to auto-save checklist toggle in journal reader:', error);
+            }
+        }
+    }, [journalId, id, hapticsEnabled]);
+
     const handleDelete = async (silent = false) => {
         if (id === 'new') {
             router.back();
@@ -623,6 +645,7 @@ export default function JournalEditorScreen() {
                                     <MarkdownText
                                         content={content}
                                         paddingHorizontal={0}
+                                        onContentChange={handleReaderContentChange}
                                         mentionNames={persons.map(p => p.name)}
                                         style={{
                                             fontSize: journalFontSize || 16,
