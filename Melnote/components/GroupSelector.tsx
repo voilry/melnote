@@ -253,8 +253,7 @@ export const GroupSelector = forwardRef<GroupSelectorHandle, GroupSelectorProps>
                                                 selectedColor === c && { borderWidth: 2.5, borderColor: colors.text }
                                             ]}
                                             innerStyle={{ borderRadius: 15 }}
-                                            scale={false}
-                                            overlayColor="transparent"
+                                            scaleTo={0.9}
                                         />
                                     ))}
                                 </ScrollView>
@@ -270,8 +269,7 @@ export const GroupSelector = forwardRef<GroupSelectorHandle, GroupSelectorProps>
                                                 { backgroundColor: selectedIcon === icon ? selectedColor : colors.surface }
                                             ]}
                                             innerStyle={{ borderRadius: 18 }}
-                                            scale={false}
-                                            overlayColor="transparent"
+                                            scaleTo={0.9}
                                         >
                                             {getIcon(icon, selectedIcon === icon ? '#fff' : colors.text, 18)}
                                         </ScalePressable>
@@ -372,8 +370,7 @@ export const GroupSelector = forwardRef<GroupSelectorHandle, GroupSelectorProps>
                                                 editColor === c && { borderWidth: 2.5, borderColor: colors.text }
                                             ]}
                                             innerStyle={{ borderRadius: 15 }}
-                                            scale={false}
-                                            overlayColor="transparent"
+                                            scaleTo={0.9}
                                         />
                                     ))}
                                 </ScrollView>
@@ -389,8 +386,7 @@ export const GroupSelector = forwardRef<GroupSelectorHandle, GroupSelectorProps>
                                                 { backgroundColor: editIcon === icon ? editColor : colors.surface }
                                             ]}
                                             innerStyle={{ borderRadius: 18 }}
-                                            scale={false}
-                                            overlayColor="transparent"
+                                            scaleTo={0.9}
                                         >
                                             {getIcon(icon, editIcon === icon ? '#fff' : colors.text, 18)}
                                         </ScalePressable>

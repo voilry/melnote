@@ -1,21 +1,18 @@
-import { View, StyleSheet, FlatList, TouchableOpacity, Modal, TextInput, KeyboardAvoidingView, ScrollView, Platform, Alert, Animated as RNAnimated } from 'react-native';
-import Animated, { FadeIn, FadeInDown, Layout, useSharedValue, useAnimatedStyle, useAnimatedScrollHandler, interpolate, Extrapolate, runOnJS } from 'react-native-reanimated';
+import { View, StyleSheet, FlatList, Platform, Animated as RNAnimated } from 'react-native';
+import Animated, { FadeInDown, Layout, useSharedValue, useAnimatedStyle, useAnimatedScrollHandler, interpolate, Extrapolate, runOnJS } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import { ThemedView } from '../../components/ui/ThemedView';
 import { ThemedText } from '../../components/ui/ThemedText';
-import { useState, useCallback, useEffect, useMemo, memo, useRef } from 'react';
+import { useState, useCallback, useMemo, memo, useRef } from 'react';
 import { JournalRepository, Journal } from '../../db/repositories/JournalRepository';
-import { PersonRepository, Person } from '../../db/repositories/PersonRepository';
 import { DesignSystem } from '../../constants/DesignSystem';
 import { Typography } from '../../constants/Typography';
 import { useAppTheme } from '../../hooks/useAppTheme';
 import { Button } from '../../components/ui/Button';
-import { Input } from '../../components/ui/Input';
-import { Book, Plus, X, MagnifyingGlass as Search, SearchNoResults, Tag, User, Trash, Calendar, CaretRight as ChevronRight, Pencil as PenTool } from '@/components/ui/Icon';
+import { SearchNoResults, Trash, Calendar, Pencil as PenTool } from '@/components/ui/Icon';
 import { Avatar } from '../../components/ui/Avatar';
 import { Card } from '../../components/ui/Card';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { StatusBar } from 'expo-status-bar';
 import { useFocusEffect } from 'expo-router/react-navigation';
 import * as Haptics from 'expo-haptics';
 import { ScalePressable } from '../../components/ui/ScalePressable';
@@ -28,6 +25,18 @@ import { useKeyboardState } from 'react-native-keyboard-controller';
 import { QuickScrollButton } from '../../components/ui/QuickScrollButton';
 import { markdownPreviewText } from '../../utils/markdownConverter';
 
+type AppColors = ReturnType<typeof useAppTheme>['colors'];
+
+interface JournalTag {
+    journalId: number;
+    person: { id: number; name: string; avatarUri?: string | null };
+}
+
+type JournalEntry = Journal & { tags: JournalTag[] };
+
+// Combined max height of the absolute header (80) + search bar (52) + padding.
+const HEADER_HEIGHT = 80 + 52 + 10;
+
 const parseLocalDate = (dateStr: string) => {
     if (!dateStr) return new Date();
     const parts = dateStr.split('-').map(Number);
@@ -37,7 +46,23 @@ const parseLocalDate = (dateStr: string) => {
     return new Date(dateStr);
 };
 
-const renderRightActions = (id: number, dragX: RNAnimated.AnimatedInterpolation<number>, colors: any, onDelete: (id: number) => void) => {
+// Cards show at most 3 lines, so converting the full markdown of a long
+// entry is wasted work. Convert only a generous leading window, trimming
+// a trailing image tag that the cut may have split so raw `![alt](…` can
+// never leak into the preview.
+const PREVIEW_WINDOW = 600;
+const previewSource = (content: string | null) => {
+    const raw = content || '';
+    if (raw.length <= PREVIEW_WINDOW) return raw;
+    let slice = raw.slice(0, PREVIEW_WINDOW);
+    const lastImg = slice.lastIndexOf('![');
+    if (lastImg !== -1 && slice.indexOf(')', lastImg) === -1) {
+        slice = slice.slice(0, lastImg);
+    }
+    return slice;
+};
+
+const renderRightActions = (id: number, dragX: RNAnimated.AnimatedInterpolation<number>, colors: AppColors, onDelete: (id: number) => void) => {
     const trans = dragX.interpolate({
         inputRange: [-80, 0],
         outputRange: [1, 0],
@@ -67,132 +92,146 @@ const renderRightActions = (id: number, dragX: RNAnimated.AnimatedInterpolation<
     );
 };
 
-const JournalItem = memo(({ item, index, colors, router, hapticsEnabled, onDelete, shouldAnimate }: any) => {
+const JournalItem = memo(function JournalItem({ item, index, colors, router, onDelete, shouldAnimate }: {
+    item: JournalEntry;
+    index: number;
+    colors: AppColors;
+    router: ReturnType<typeof useRouter>;
+    onDelete: (id: number) => void;
+    shouldAnimate: boolean;
+}) {
+    const preview = useMemo(() => markdownPreviewText(previewSource(item.content)), [item.content]);
+    const dateLabel = useMemo(
+        () => parseLocalDate(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+        [item.date]
+    );
+
     return (
-    <Animated.View
-        entering={shouldAnimate ? FadeInDown.delay(Math.min(index, 5) * 15).duration(260).springify().damping(24).stiffness(280).mass(0.7) : undefined}
-        layout={Layout.springify().damping(26).stiffness(280)}
-        style={styles.journalItem}
-    >
-        <Swipeable
-            renderRightActions={(_progress, dragX) => renderRightActions(item.id, dragX, colors, onDelete)}
-            overshootRight={false}
-            friction={3}
-            overshootFriction={8}
-            rightThreshold={60}
+        <Animated.View
+            entering={shouldAnimate ? FadeInDown.delay(Math.min(index, 5) * 15).duration(260).springify().damping(24).stiffness(280).mass(0.7) : undefined}
+            layout={Layout.springify().damping(26).stiffness(280)}
+            style={styles.journalItem}
         >
-            <ScalePressable
-                onPress={() => router.push({ pathname: '/journal/[id]', params: { id: item.id } })}
-                style={{ width: '100%' }}
-                innerStyle={{ borderRadius: DesignSystem.radius.lg }}
-                scale={true}
-                scaleTo={0.96}
+            <Swipeable
+                renderRightActions={(_progress, dragX) => renderRightActions(item.id, dragX, colors, onDelete)}
+                overshootRight={false}
+                friction={3}
+                overshootFriction={8}
+                rightThreshold={60}
             >
-            <Card style={[{ backgroundColor: colors.surface, borderColor: colors.text + '10' }]} padding="lg">
-                <View style={styles.cardHeader}>
-                    <Badge variant="tint" icon={<Calendar size={12} color={colors.tint} weight="bold" />}>
-                        {parseLocalDate(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                    </Badge>
-                </View>
+                <ScalePressable
+                    onPress={() => router.push({ pathname: '/journal/[id]', params: { id: item.id } })}
+                    style={{ width: '100%' }}
+                    innerStyle={{ borderRadius: DesignSystem.radius.lg }}
+                    scale={true}
+                    scaleTo={0.96}
+                >
+                    <Card style={[{ backgroundColor: colors.surface, borderColor: colors.text + '10' }]} padding="lg">
+                        <View style={styles.cardHeader}>
+                            <Badge variant="tint" icon={<Calendar size={12} color={colors.tint} weight="bold" />}>
+                                {dateLabel}
+                            </Badge>
+                        </View>
 
-                {item.title ? (
-                    <ThemedText type="sectionHeader" style={styles.journalTitle}>{item.title}</ThemedText>
-                ) : null}
-                <ThemedText style={styles.journalContent} numberOfLines={3}>{markdownPreviewText(item.content)}</ThemedText>
+                        {item.title ? (
+                            <ThemedText type="sectionHeader" style={styles.journalTitle}>{item.title}</ThemedText>
+                        ) : null}
+                        <ThemedText style={styles.journalContent} numberOfLines={3}>{preview}</ThemedText>
 
-                {item.tags.length > 0 && (
-                    <View style={styles.tagsContainer}>
-                        {item.tags.map((t: any, idx: number) => (
-                            <View key={`journal-${item.id}-tag-${t.person.id}-${idx}`} style={[styles.tag, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                                <Avatar name={t.person.name} uri={t.person.avatarUri} size={18} />
-                                <ThemedText type="tiny" style={styles.tagName}>{t.person.name.split(' ')[0]}</ThemedText>
+                        {item.tags.length > 0 && (
+                            <View style={styles.tagsContainer}>
+                                {item.tags.map((t, idx) => (
+                                    <View key={`journal-${item.id}-tag-${t.person.id}-${idx}`} style={[styles.tag, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                                        <Avatar name={t.person.name} uri={t.person.avatarUri} size={18} />
+                                        <ThemedText type="tiny" style={styles.tagName}>{t.person.name.split(' ')[0]}</ThemedText>
+                                    </View>
+                                ))}
                             </View>
-                        ))}
-                    </View>
-                )}
-            </Card>
-        </ScalePressable>
-        </Swipeable>
-    </Animated.View>
+                        )}
+                    </Card>
+                </ScalePressable>
+            </Swipeable>
+        </Animated.View>
     );
 });
 
 export default function JournalScreen() {
     const router = useRouter();
     const insets = useSafeAreaInsets();
-    const [journals, setJournals] = useState<any[]>([]);
-    const [people, setPeople] = useState<Person[]>([]);
+    const [journals, setJournals] = useState<JournalEntry[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [shouldAnimate, setShouldAnimate] = useState(true);
     const [entryToDelete, setEntryToDelete] = useState<number | null>(null);
     const [tabFocusKey, setTabFocusKey] = useState(0);
-    // Remove inline new journal state since we use the /journal/[id] route
+    const [searchQuery, setSearchQuery] = useState('');
 
-    const { colors, theme, hapticsEnabled } = useAppTheme();
+    const { colors, hapticsEnabled } = useAppTheme();
     const keyboardVisible = useKeyboardState((state) => state.isVisible);
+
+    // A ref, not state: entering animations only matter when a row mounts,
+    // so flipping this must not re-render every visible row.
+    const shouldAnimateRef = useRef(true);
+
+    const loadData = useCallback(async () => {
+        try {
+            const journalData = await JournalRepository.getAll();
+            setJournals(journalData as JournalEntry[]);
+        } catch (error) {
+            console.error('Failed to load journals:', error);
+        } finally {
+            setIsLoading(false);
+        }
+    }, []);
 
     useFocusEffect(
         useCallback(() => {
             setTabFocusKey(k => k + 1);
-            setShouldAnimate(true);
+            shouldAnimateRef.current = true;
             loadData();
             // Disable animations after initial load to prevent scroll-triggered animations
-            const timer = setTimeout(() => setShouldAnimate(false), 1200);
+            const timer = setTimeout(() => { shouldAnimateRef.current = false; }, 1200);
             return () => clearTimeout(timer);
-        }, [])
+        }, [loadData])
     );
 
-    const loadData = async () => {
-        try {
-            const [journalData, peopleData] = await Promise.all([
-                JournalRepository.getAll(),
-                PersonRepository.getAll()
-            ]);
-
-            setJournals(journalData);
-            setPeople(peopleData);
-            setIsLoading(false);
-        } catch (error) {
-            console.error('Failed to load journals:', error);
-        }
-    };
-
-
-
-    const handleAddPress = () => {
+    const handleAddPress = useCallback(() => {
         if (hapticsEnabled && Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         router.push({ pathname: '/journal/[id]', params: { id: 'new', edit: 'true' } });
-    };
+    }, [hapticsEnabled, router]);
 
-    const handleDelete = (id: number) => {
+    const handleDelete = useCallback((id: number) => {
         setEntryToDelete(id);
-    };
+    }, []);
 
     const confirmDelete = async () => {
-        if (entryToDelete !== null) {
-            await JournalRepository.delete(entryToDelete);
+        if (entryToDelete === null) return;
+        const id = entryToDelete;
+        setEntryToDelete(null);
+        // Optimistic removal: the row collapses via its layout animation
+        // immediately; a failed delete restores reality with a reload.
+        setJournals(prev => prev.filter(j => j.id !== id));
+        try {
+            await JournalRepository.delete(id);
+        } catch (error) {
+            console.error('Failed to delete journal entry:', error);
             loadData();
-            setEntryToDelete(null);
         }
     };
 
-    const renderJournalItem = useCallback(({ item, index }: { item: any, index: number }) => (
+    const renderJournalItem = useCallback(({ item, index }: { item: JournalEntry, index: number }) => (
         <JournalItem
             item={item}
             index={index}
             colors={colors}
             router={router}
-            hapticsEnabled={hapticsEnabled}
             onDelete={handleDelete}
-            shouldAnimate={shouldAnimate}
+            shouldAnimate={shouldAnimateRef.current}
         />
-    ), [colors, router, hapticsEnabled, shouldAnimate]);
-
-    const [searchQuery, setSearchQuery] = useState('');
+    ), [colors, router, handleDelete]);
 
     const scrollY = useSharedValue(0);
     const scrollDirection = useSharedValue<'up' | 'down'>('up');
     const isScrolling = useSharedValue(false);
+    const lastScrollNotify = useSharedValue(0);
     const hideTimeout = useRef<any>(null);
     const journalListRef = useRef<FlatList>(null);
 
@@ -207,14 +246,20 @@ export default function JournalScreen() {
         onScroll: (event) => {
             const currentY = event.contentOffset.y;
             const diff = currentY - scrollY.value;
-            
+
             if (Math.abs(diff) > 5) {
                 scrollDirection.value = diff > 0 ? 'down' : 'up';
                 isScrolling.value = currentY > 400;
             }
             scrollY.value = currentY;
-            
-            runOnJS(startHideTimer)();
+
+            // The hide timer only needs ~800ms accuracy; crossing to JS every
+            // frame is wasted bridge traffic, so throttle to ~150ms.
+            const now = Date.now();
+            if (now - lastScrollNotify.value > 150) {
+                lastScrollNotify.value = now;
+                runOnJS(startHideTimer)();
+            }
         },
     });
 
@@ -257,38 +302,47 @@ export default function JournalScreen() {
         };
     });
 
-    const headerHeight = 80 + 52 + 10; // combined max height with optimized padding
+    // Precomputed once per data load so filtering per keystroke is plain
+    // string matching — no date formatting or lowercasing in the hot path.
+    const searchIndex = useMemo(() => journals.map(j => {
+        let dateFormats: string[] = [];
+        if (j.date) {
+            const d = parseLocalDate(j.date);
+            if (!isNaN(d.getTime())) {
+                dateFormats = [
+                    d.toLocaleDateString('default', { month: 'long', day: 'numeric' }).toLowerCase(),
+                    d.toLocaleDateString('default', { month: 'short', day: 'numeric' }).toLowerCase(),
+                    d.toLocaleDateString('default', { month: 'long', year: 'numeric' }).toLowerCase(),
+                    d.toLocaleDateString('default', { month: 'short', year: 'numeric' }).toLowerCase(),
+                    j.date.toLowerCase(),
+                ];
+            }
+        }
+        return {
+            journal: j,
+            title: (j.title || '').toLowerCase(),
+            content: (j.content || '').toLowerCase(),
+            tagNames: (j.tags || []).map(t => t.person.name.toLowerCase()),
+            dateFormats,
+        };
+    }), [journals]);
 
     const filteredJournals = useMemo(() => {
-        return journals.filter(j => {
-            const q = searchQuery.toLowerCase().trim();
-            if (!q) return true;
-            const contentMatch = (j.title && j.title.toLowerCase().includes(q)) || (j.content && j.content.toLowerCase().includes(q));
-            const tagMatch = j.tags && j.tags.some((t: any) => t.person.name.toLowerCase().includes(q));
+        const q = searchQuery.toLowerCase().trim();
+        if (!q) return journals;
+        const qParts = q.includes(' ') ? q.split(/\s+/) : null;
+        return searchIndex
+            .filter(e => {
+                if (e.title.includes(q) || e.content.includes(q)) return true;
+                if (e.tagNames.some(name => name.includes(q))) return true;
+                if (e.dateFormats.some(f => f.includes(q))) return true;
+                // Multi-word queries may match date parts across formats.
+                return !!qParts && qParts.every(part => e.dateFormats.some(f => f.includes(part)));
+            })
+            .map(e => e.journal);
+    }, [journals, searchIndex, searchQuery]);
 
-            // Comprehensive Date Match
-            let dateMatch = false;
-            if (j.date) {
-                const d = parseLocalDate(j.date);
-                if (!isNaN(d.getTime())) {
-                    const formats = [
-                        d.toLocaleDateString('default', { month: 'long', day: 'numeric' }).toLowerCase(),
-                        d.toLocaleDateString('default', { month: 'short', day: 'numeric' }).toLowerCase(),
-                        d.toLocaleDateString('default', { month: 'long', year: 'numeric' }).toLowerCase(),
-                        d.toLocaleDateString('default', { month: 'short', year: 'numeric' }).toLowerCase(),
-                        j.date.toLowerCase()
-                    ];
-                    // Check if any part matches or if the combined parts match
-                    dateMatch = formats.some(f => f.includes(q));
-                    if (!dateMatch && q.includes(' ')) {
-                        const qParts = q.split(/\s+/);
-                        dateMatch = qParts.every(part => formats.some(f => f.includes(part)));
-                    }
-                }
-            }
-            return contentMatch || tagMatch || dateMatch;
-        });
-    }, [journals, searchQuery]);
+    const listHeader = useMemo(() => <View style={{ height: HEADER_HEIGHT }} />, []);
 
     return (
         <ThemedView style={[styles.container, { paddingTop: insets.top }]}>
@@ -326,10 +380,10 @@ export default function JournalScreen() {
             <Animated.FlatList
                 ref={journalListRef}
                 data={filteredJournals}
-                keyExtractor={(item, index) => `journal-${item.id}-${tabFocusKey}`}
+                keyExtractor={(item) => `journal-${item.id}-${tabFocusKey}`}
                 extraData={tabFocusKey}
                 renderItem={renderJournalItem}
-                ListHeaderComponent={<View style={{ height: headerHeight }} />}
+                ListHeaderComponent={listHeader}
                 contentContainerStyle={[
                     styles.list,
                     { paddingBottom: insets.bottom + 100 },
@@ -369,7 +423,6 @@ export default function JournalScreen() {
                 }
             />
 
-
             <DeleteModal
                 visible={entryToDelete !== null}
                 title="Delete Entry"
@@ -378,10 +431,10 @@ export default function JournalScreen() {
                 onDelete={confirmDelete}
             />
 
-            <QuickScrollButton 
-                isScrolling={isScrolling} 
-                direction={scrollDirection} 
-                onPress={handleQuickScroll} 
+            <QuickScrollButton
+                isScrolling={isScrolling}
+                direction={scrollDirection}
+                onPress={handleQuickScroll}
             />
         </ThemedView>
     );
@@ -414,8 +467,6 @@ const styles = StyleSheet.create({
         paddingTop: DesignSystem.spacing.xs,
     },
     journalItem: { marginBottom: DesignSystem.spacing.md },
-    journalCard: {
-    },
     cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
     journalTitle: { fontSize: 18, marginBottom: 8 },
     journalContent: { fontSize: 16, lineHeight: 24, marginBottom: 16, fontWeight: '500' },
@@ -437,14 +488,6 @@ const styles = StyleSheet.create({
     emptyKeyboardShift: {
         transform: [{ translateY: -DesignSystem.spacing['3xl'] }],
     },
-    emptyIconContainer: {
-        width: 72,
-        height: 72,
-        borderRadius: 36,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 16,
-    },
     emptyTitle: {
         fontSize: 20,
         marginTop: 6,
@@ -465,90 +508,4 @@ const styles = StyleSheet.create({
         borderRadius: 24,
         marginTop: 8,
     },
-    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-    modalContent: { flex: 1, borderTopLeftRadius: 32, borderTopRightRadius: 32, paddingHorizontal: 20 },
-    modalHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingVertical: 20,
-        marginBottom: 10,
-    },
-    titleInput: {
-        fontSize: 24,
-        fontWeight: '700',
-        marginBottom: 16,
-        paddingHorizontal: 4,
-    },
-    journalInput: {
-        fontSize: 19,
-        minHeight: 180,
-        textAlignVertical: 'top',
-        paddingTop: 10,
-        fontWeight: '500',
-        lineHeight: 28,
-    },
-    tagSection: { marginTop: 20, borderTopWidth: 1, borderTopColor: 'rgba(128,128,128,0.1)', paddingTop: 24 },
-    label: {
-        fontSize: 12,
-        fontWeight: '800',
-        marginBottom: 8,
-        letterSpacing: 0,
-        lineHeight: 16,
-    },
-    tagSearchBAR: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 16,
-        height: 48,
-        borderRadius: 14,
-        borderWidth: 1,
-        marginBottom: 20,
-    },
-    tagSearchInput: { flex: 1, marginLeft: 10, fontSize: 15, fontWeight: '500' },
-    peopleList: { marginBottom: 20 },
-    personTagItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: 8,
-        paddingHorizontal: 12,
-        borderRadius: 14,
-        borderWidth: 1.5,
-        borderColor: 'transparent',
-    },
-    personTagName: { marginLeft: 8, fontSize: 14, fontWeight: '600' },
-    modalPage: {
-        flex: 1,
-    },
-    sheetIndicator: {
-        width: '100%',
-        height: 12,
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginTop: 8,
-    },
-    handleIndicator: {
-        width: 36,
-        height: 5,
-        borderRadius: 2.5,
-        opacity: 0.5,
-    },
-    modalHeaderFullScreen: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: 8,
-        marginBottom: 10,
-    },
-    modalAction: {
-        width: 48,
-        height: 48,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    modalTitleFullScreen: {
-        fontSize: 18,
-        fontWeight: '800',
-    },
 });
-

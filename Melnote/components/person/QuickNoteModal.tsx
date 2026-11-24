@@ -197,6 +197,8 @@ export function QuickNoteModal({ visible, person, onClose, onSave }: QuickNoteMo
     // window sliding out instead of this screen.
     const { mounted: modalMounted, animatedStyle: modalSlideStyle } = useFullScreenModal(visible);
     const [searchQuery, setSearchQuery] = useState('');
+    const [creatingNew, setCreatingNew] = useState(false);
+    const [newNoteName, setNewNoteName] = useState('');
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
     const [showDiscard, setShowDiscard] = useState(false);
@@ -442,12 +444,16 @@ export function QuickNoteModal({ visible, person, onClose, onSave }: QuickNoteMo
         Keyboard.dismiss();
         sheetHeight.value = collapsedSheetHeight;
         setSearchQuery('');
+        setCreatingNew(false);
+        setNewNoteName('');
         setShowSheet(true);
     };
 
     const closeSheet = () => {
         setShowSheet(false);
         setSearchQuery('');
+        setCreatingNew(false);
+        setNewNoteName('');
         setTimeout(() => inputRef.current?.focus(), 220);
     };
 
@@ -461,7 +467,28 @@ export function QuickNoteModal({ visible, person, onClose, onSave }: QuickNoteMo
         setCategory(next);
         setShowSheet(false);
         setSearchQuery('');
+        setCreatingNew(false);
+        setNewNoteName('');
         setTimeout(() => inputRef.current?.focus(), 220);
+    };
+
+    const startCreateNew = () => {
+        setSearchQuery('');
+        setNewNoteName('');
+        setCreatingNew(true);
+    };
+
+    const confirmNewNote = () => {
+        const next = newNoteName.trim();
+        if (!next) return;
+        // Match existing names case-insensitively so "work" selects "Work"
+        // instead of creating a near-duplicate category.
+        const existing = [...usedNotes, ...STARTER_NOTES, category].find(
+            label => label.toLowerCase() === next.toLowerCase()
+        );
+        // chooseNote resets create mode, closes the sheet and refocuses the
+        // composer.
+        chooseNote(existing ?? next);
     };
 
     const handleClose = () => {
@@ -665,6 +692,11 @@ export function QuickNoteModal({ visible, person, onClose, onSave }: QuickNoteMo
                                         value={searchQuery}
                                         onChangeText={setSearchQuery}
                                         onFocus={() => {
+                                            // Searching takes over from inline creation; leaving
+                                            // it mounted would let its autoFocus steal focus back
+                                            // when the create row hides and reappears.
+                                            setCreatingNew(false);
+                                            setNewNoteName('');
                                             if (sheetHeight.value > collapsedSheetHeight + 2) {
                                                 sheetHeight.value = withSpring(
                                                     collapsedSheetHeight,
@@ -726,6 +758,71 @@ export function QuickNoteModal({ visible, person, onClose, onSave }: QuickNoteMo
                                             : null,
                                     ]}
                                 >
+                                    {!showCreate ? (
+                                        creatingNew ? (
+                                            <Animated.View
+                                                entering={FadeIn.duration(140)}
+                                                style={styles.newNoteRow}
+                                            >
+                                                <TextInput
+                                                    value={newNoteName}
+                                                    onChangeText={setNewNoteName}
+                                                    placeholder="Name your new note…"
+                                                    placeholderTextColor={colors.textTertiary}
+                                                    style={[styles.newNoteInput, { color: colors.text }]}
+                                                    selectionColor={colors.tint}
+                                                    autoFocus
+                                                    autoCapitalize="words"
+                                                    autoCorrect={false}
+                                                    returnKeyType="done"
+                                                    onSubmitEditing={confirmNewNote}
+                                                    onFocus={() => {
+                                                        // Same guard as the search box: collapse an
+                                                        // expanded sheet before the keyboard rises,
+                                                        // or the keyboard padding pushes it off-screen.
+                                                        if (sheetHeight.value > collapsedSheetHeight + 2) {
+                                                            sheetHeight.value = withSpring(
+                                                                collapsedSheetHeight,
+                                                                SHEET_SPRING
+                                                            );
+                                                        }
+                                                    }}
+                                                />
+                                                <ScalePressable
+                                                    onPress={confirmNewNote}
+                                                    disabled={!newNoteName.trim()}
+                                                    haptic={false}
+                                                    hitSlop={8}
+                                                    style={[
+                                                        styles.newNoteConfirm,
+                                                        {
+                                                            backgroundColor: newNoteName.trim()
+                                                                ? colors.tint
+                                                                : colors.surface,
+                                                        },
+                                                    ]}
+                                                    innerStyle={{ borderRadius: 10 }}
+                                                    scaleTo={0.9}
+                                                    accessibilityRole="button"
+                                                    accessibilityLabel="Create note"
+                                                >
+                                                    <Add
+                                                        size={18}
+                                                        color={newNoteName.trim() ? colors.tintContrast : colors.textTertiary}
+                                                        weight="bold"
+                                                    />
+                                                </ScalePressable>
+                                            </Animated.View>
+                                        ) : (
+                                            <NoteRow
+                                                label="Create New Note"
+                                                accessibilityLabel="Create a new note"
+                                                onPress={startCreateNew}
+                                                icon={<PlusCircle size={18} color={colors.tint} weight="fill" />}
+                                            />
+                                        )
+                                    ) : null}
+
                                     {showCreate ? (
                                         <NoteRow
                                             label={`Create "${query}"`}
@@ -1001,6 +1098,27 @@ const styles = StyleSheet.create({
         paddingHorizontal: 10,
         paddingVertical: 8,
         marginBottom: 2,
+    },
+    newNoteRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        height: 54,
+        paddingHorizontal: 10,
+        marginBottom: 2,
+    },
+    newNoteInput: {
+        flex: 1,
+        fontSize: 15.5,
+        fontFamily: Typography.fontFamily.semibold,
+        paddingVertical: 0,
+        marginRight: 10,
+    },
+    newNoteConfirm: {
+        width: 32,
+        height: 32,
+        borderRadius: 10,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     noteRowIcon: {
         width: 34,

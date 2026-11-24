@@ -2,7 +2,7 @@
   "expo": {
     "name": "Melnote",
     "slug": "melnote",
-    "version": "0.5.1",
+    "version": "0.5.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -16,7 +16,7 @@
         "backgroundColor": "#F8F3EB"
       },
       "package": "com.voilry.melnote",
-      "versionCode": 3
+      "versionCode": 4
     },
     "web": {
       "favicon": "./assets/favicon.png",
