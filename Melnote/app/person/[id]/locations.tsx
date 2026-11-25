@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { View, StyleSheet, TouchableOpacity, Platform, Linking } from 'react-native';
+import { View, StyleSheet, Platform, Linking, BackHandler } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { ThemedView } from '../../../components/ui/ThemedView';
@@ -8,19 +8,17 @@ import { PersonRepository, Person } from '../../../db/repositories/PersonReposit
 import { DesignSystem } from '../../../constants/DesignSystem';
 import { ScreenHeader } from '../../../components/ui/ScreenHeader';
 import { Input } from '../../../components/ui/Input';
-import { Card } from '../../../components/ui/Card';
-import { Button } from '../../../components/ui/Button';
 import { ScalePressable } from '../../../components/ui/ScalePressable';
 import { useAppTheme } from '../../../hooks/useAppTheme';
-import { House as Home, Briefcase, Airplane as Plane, MapPin, X, Check, NavigationArrow as Navigation } from '@/components/ui/Icon';
+import { House as Home, Briefcase, Airplane as Plane, Check, NavigationArrow as Navigation } from '@/components/ui/Icon';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Typography } from '../../../constants/Typography';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { useFocusEffect } from 'expo-router/react-navigation';
-import { BackHandler } from 'react-native';
 import { DeleteModal } from '../../../components/ui/DeleteModal';
+import { showToast } from '../../../components/ui/Toast';
 
 export default function PersonLocationsScreen() {
     const { id } = useLocalSearchParams();
@@ -36,24 +34,33 @@ export default function PersonLocationsScreen() {
     const [originalData, setOriginalData] = useState({ home: '', work: '', other: '' });
     const [isSaving, setIsSaving] = useState(false);
     const [showDiscardModal, setShowDiscardModal] = useState(false);
+    const [loadFailed, setLoadFailed] = useState(false);
 
     useEffect(() => {
         if (id) loadData();
     }, [id]);
 
     const loadData = async () => {
-        const p = await PersonRepository.getById(personId);
-        if (p) {
-            setPerson(p);
-            const data = {
-                home: p.locationHome || '',
-                work: p.locationWork || '',
-                other: p.locationOther || ''
-            };
-            setLocationHome(data.home);
-            setLocationWork(data.work);
-            setLocationOther(data.other);
-            setOriginalData(data);
+        try {
+            const p = await PersonRepository.getById(personId);
+            if (p) {
+                setPerson(p);
+                const data = {
+                    home: p.locationHome || '',
+                    work: p.locationWork || '',
+                    other: p.locationOther || ''
+                };
+                setLocationHome(data.home);
+                setLocationWork(data.work);
+                setLocationOther(data.other);
+                setOriginalData(data);
+            } else {
+                setLoadFailed(true);
+            }
+        } catch (error) {
+            // Without this the screen would stay blank with no way out.
+            console.error('Failed to load locations:', error);
+            setLoadFailed(true);
         }
     };
 
@@ -89,18 +96,25 @@ export default function PersonLocationsScreen() {
     };
 
     const handleSave = async () => {
-        if (!person) return;
+        if (!person || isSaving) return;
         setIsSaving(true);
-        if (hapticsEnabled && Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        if (hapticsEnabled && Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
 
-        await PersonRepository.update(personId, {
-            locationHome: locationHome.trim(),
-            locationWork: locationWork.trim(),
-            locationOther: locationOther.trim()
-        });
-
-        setIsSaving(false);
-        router.back();
+        try {
+            await PersonRepository.update(personId, {
+                locationHome: locationHome.trim(),
+                locationWork: locationWork.trim(),
+                locationOther: locationOther.trim()
+            });
+            router.back();
+        } catch (error) {
+            // Without this the save button would stay disabled forever and the
+            // screen would look like it had saved.
+            console.error('Failed to save locations:', error);
+            showToast('Could not save locations');
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     const handleOpenMap = (value: string) => {
@@ -111,13 +125,40 @@ export default function PersonLocationsScreen() {
             android: `geo:0,0?q=${query}`,
             default: `https://www.google.com/maps/search/?api=1&query=${query}`
         });
-        Linking.openURL(url as string);
+        // A device without a maps app rejects the intent - say so instead of
+        // letting the rejection disappear.
+        Linking.openURL(url as string).catch(() => {
+            showToast('Could not open the map');
+        });
     };
 
     if (!person) {
         return (
-            <ThemedView style={{ flex: 1 }}>
+            <ThemedView style={[styles.container, styles.notFound]}>
                 <Stack.Screen options={{ headerShown: false }} />
+                {loadFailed && (
+                    <>
+                        <ThemedText style={styles.notFoundTitle}>Locations unavailable</ThemedText>
+                        <ThemedText style={[styles.notFoundBody, { color: colors.secondary }]}>
+                            This profile may have been deleted, or something went wrong while reading it.
+                        </ThemedText>
+                        <ScalePressable
+                            onPress={() => {
+                                if (router.canGoBack()) router.back();
+                                else router.replace('/');
+                            }}
+                            style={[styles.notFoundButton, { backgroundColor: colors.tint }]}
+                            innerStyle={{ borderRadius: 18 }}
+                            scaleTo={0.96}
+                            accessibilityRole="button"
+                            accessibilityLabel="Go back"
+                        >
+                            <ThemedText style={[styles.notFoundButtonText, { color: colors.tintContrast }]}>
+                                Go back
+                            </ThemedText>
+                        </ScalePressable>
+                    </>
+                )}
             </ThemedView>
         );
     }
@@ -292,24 +333,33 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
     },
-    sectionDivider: {
-        marginBottom: 16,
-        paddingHorizontal: 4,
+    notFound: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 28,
     },
-    sectionLabel: {
-        fontSize: 15,
-        opacity: 0.7,
-        marginBottom: 4,
-    },
-    disclaimerCard: {
-        marginTop: 32,
-        padding: 20,
-        borderRadius: 16,
-    },
-    disclaimerText: {
-        fontSize: 13,
-        lineHeight: 20,
+    notFoundTitle: {
+        fontSize: 20,
+        lineHeight: 26,
+        letterSpacing: -0.4,
         textAlign: 'center',
         fontFamily: Typography.fontFamily.serif,
+    },
+    notFoundBody: {
+        marginTop: 8,
+        fontSize: 13.5,
+        lineHeight: 19,
+        textAlign: 'center',
+        fontFamily: Typography.fontFamily.regular,
+    },
+    notFoundButton: {
+        marginTop: 20,
+        paddingHorizontal: 22,
+        paddingVertical: 12,
+        borderRadius: 18,
+    },
+    notFoundButtonText: {
+        fontSize: 14.5,
+        fontFamily: Typography.fontFamily.bold,
     },
 });

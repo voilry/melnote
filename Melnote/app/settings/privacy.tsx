@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, BackHandler } from 'react-native';
+import { View, StyleSheet, ScrollView, BackHandler, Platform } from 'react-native';
 import { Stack, useRouter, useFocusEffect } from 'expo-router';
 import { ThemedView } from '../../components/ui/ThemedView';
 import { ThemedText } from '../../components/ui/ThemedText';
@@ -45,9 +45,17 @@ export default function PrivacySettingsScreen() {
     const biometricBusy = useRef(false);
 
     const checkBiometrics = useCallback(async () => {
-        const hasHardware = await LocalAuthentication.hasHardwareAsync();
-        const isEnrolled = await LocalAuthentication.isEnrolledAsync();
-        setHasBiometrics(hasHardware && isEnrolled);
+        // A device without a biometric sensor (or one that refuses the query)
+        // must simply fall back to "no biometrics", not throw into the focus
+        // effect where nothing catches it.
+        try {
+            const hasHardware = await LocalAuthentication.hasHardwareAsync();
+            const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+            setHasBiometrics(hasHardware && isEnrolled);
+        } catch (error) {
+            console.warn('Could not query biometric hardware:', error);
+            setHasBiometrics(false);
+        }
     }, []);
 
     /**
@@ -93,7 +101,7 @@ export default function PrivacySettingsScreen() {
     }, [pinMode, cancelPinEntry]);
 
     const triggerHaptic = () => {
-        if (settings.hapticsEnabled) {
+        if (settings.hapticsEnabled && Platform.OS !== 'web') {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
         }
     };

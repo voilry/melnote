@@ -15,20 +15,62 @@ import * as Haptics from 'expo-haptics';
 import { useAppTheme } from '../../hooks/useAppTheme';
 import { ScalePressable } from '../../components/ui/ScalePressable';
 import { ScreenHeader } from '../../components/ui/ScreenHeader';
-import { Badge } from '../../components/ui/Badge';
 import { QuickScrollButton } from '../../components/ui/QuickScrollButton';
+
+// Module scope: defining this inside the screen created a new component type
+// on every render, so React unmounted and rebuilt every card (and replayed its
+// entrance animation) each time the list state changed.
+const CityItem = memo(({ item, index, colors, hapticsEnabled, router }: any) => (
+    <Animated.View
+        layout={Layout.springify()}
+        style={{ flex: 1, maxWidth: '48%' }}
+    >
+        <Animated.View
+            entering={FadeInDown.delay(Math.min(index, 6) * 60).duration(500)}
+        >
+            <ScalePressable
+                onPress={() => {
+                    if (hapticsEnabled && Platform.OS !== 'web') Haptics.selectionAsync().catch(() => {});
+                    router.push(`/location/${encodeURIComponent(item.name)}`);
+                }}
+                style={styles.locationItem}
+                innerStyle={{ borderRadius: 24 }}
+                accessibilityRole="button"
+                accessibilityLabel={`${item.name}, ${item.count} ${item.count === 1 ? 'person' : 'people'}`}
+            >
+                <Card style={[styles.locationCard, { backgroundColor: colors.card, borderWidth: 0 }]} padding="none">
+                    <View style={styles.locationCardInner}>
+                        <View style={[styles.iconBox, { backgroundColor: colors.surface }]}>
+                            <Globe size={24} color={colors.tint} weight="duotone" />
+                        </View>
+
+                        <View style={styles.locationInfo}>
+                            <ThemedText style={styles.cityName} numberOfLines={1}>
+                                {item.name}
+                            </ThemedText>
+                            <ThemedText style={[styles.peopleCount, { color: colors.secondary }]}>
+                                {item.count} {item.count === 1 ? 'person' : 'people'}
+                            </ThemedText>
+                        </View>
+                    </View>
+                </Card>
+            </ScalePressable>
+        </Animated.View>
+    </Animated.View>
+));
 
 export default function LocationsScreen() {
     const router = useRouter();
     const insets = useSafeAreaInsets();
     const [cityGroups, setCityGroups] = useState<{ name: string; count: number }[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const { colors, theme, hapticsEnabled } = useAppTheme();
+    const { colors, hapticsEnabled } = useAppTheme();
 
     // Scroll Logic
     const scrollY = useSharedValue(0);
     const scrollDirection = useSharedValue<'up' | 'down'>('up');
     const isScrolling = useSharedValue(false);
+    const lastScrollNotify = useSharedValue(0);
     const hideTimeout = useRef<any>(null);
     const listRef = useRef<FlatList>(null);
 
@@ -39,18 +81,29 @@ export default function LocationsScreen() {
         }, 800);
     }, []);
 
+    // Stop the pending hide timer when the screen goes away.
+    useEffect(() => () => {
+        if (hideTimeout.current) clearTimeout(hideTimeout.current);
+    }, []);
+
     const scrollHandler = useAnimatedScrollHandler({
         onScroll: (event) => {
             const currentY = event.contentOffset.y;
             const diff = currentY - scrollY.value;
-            
+
             if (Math.abs(diff) > 5) {
                 scrollDirection.value = diff > 0 ? 'down' : 'up';
                 isScrolling.value = currentY > 200;
             }
             scrollY.value = currentY;
-            
-            runOnJS(startHideTimer)();
+
+            // The hide timer only needs ~800ms accuracy; crossing to JS every
+            // frame is wasted bridge traffic, so throttle to ~150ms.
+            const now = Date.now();
+            if (now - lastScrollNotify.value > 150) {
+                lastScrollNotify.value = now;
+                runOnJS(startHideTimer)();
+            }
         },
     });
 
@@ -68,74 +121,45 @@ export default function LocationsScreen() {
 
     const loadData = async () => {
         setIsLoading(true);
-        const data = await PersonRepository.getAll();
+        try {
+            const data = await PersonRepository.getAll();
 
-        // Group by City (Normalized to Title Case)
-        const groups: { [key: string]: number } = {};
-        data.forEach((p: Person) => {
-            const rawCity = p.city?.trim();
-            if (rawCity) {
-                // Better normalization: Title Case every word (e.g., "San francisco" -> "San Francisco")
-                const normalized = rawCity.split(' ').map(word => 
-                    word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
-                ).join(' ');
-                groups[normalized] = (groups[normalized] || 0) + 1;
-            }
-        });
+            // Group by City (Normalized to Title Case)
+            const groups: { [key: string]: number } = {};
+            data.forEach((p: Person) => {
+                const rawCity = p.city?.trim();
+                if (rawCity) {
+                    // Better normalization: Title Case every word (e.g., "San francisco" -> "San Francisco")
+                    const normalized = rawCity.split(' ').map(word =>
+                        word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+                    ).join(' ');
+                    groups[normalized] = (groups[normalized] || 0) + 1;
+                }
+            });
 
-        const sortedGroups = Object.keys(groups)
-            .sort()
-            .map(name => ({ name, count: groups[name] }));
+            const sortedGroups = Object.keys(groups)
+                .sort()
+                .map(name => ({ name, count: groups[name] }));
 
-        setCityGroups(sortedGroups);
-        setIsLoading(false);
+            setCityGroups(sortedGroups);
+        } catch (error) {
+            // Without this the empty state would show as if there were no
+            // cities, hiding the real failure.
+            console.error('Failed to load cities:', error);
+        } finally {
+            setIsLoading(false);
+        }
     };
 
-    const CityItem = memo(({ item, index, onPress }: any) => (
-        <Animated.View
-            key={item.name}
-            layout={Layout.springify()}
-            style={{ flex: 1, maxWidth: '48%' }}
-        >
-            <Animated.View
-                entering={FadeInDown.delay(Math.min(index, 6) * 60).duration(500)}
-            >
-                <ScalePressable
-                    onPress={onPress}
-                    style={styles.locationItem}
-                    innerStyle={{ borderRadius: 24 }}
-                >
-                    <Card style={[styles.locationCard, { backgroundColor: colors.card, borderWidth: 0 }]} padding="none">
-                        <View style={styles.locationCardInner}>
-                            <View style={[styles.iconBox, { backgroundColor: colors.surface }]}>
-                                <Globe size={24} color={colors.tint} weight="duotone" />
-                            </View>
-                            
-                            <View style={styles.locationInfo}>
-                                <ThemedText style={styles.cityName} numberOfLines={1}>
-                                    {item.name}
-                                </ThemedText>
-                                <ThemedText style={[styles.peopleCount, { color: colors.secondary }]}>
-                                    {item.count} {item.count === 1 ? 'person' : 'people'}
-                                </ThemedText>
-                            </View>
-                        </View>
-                    </Card>
-                </ScalePressable>
-            </Animated.View>
-        </Animated.View>
-    ));
-
-    const renderItem = ({ item, index }: { item: any; index: number }) => (
+    const renderItem = useCallback(({ item, index }: { item: any; index: number }) => (
         <CityItem
             item={item}
             index={index}
-            onPress={() => {
-                if (hapticsEnabled && Platform.OS !== 'web') Haptics.selectionAsync();
-                router.push(`/location/${encodeURIComponent(item.name)}`);
-            }}
+            colors={colors}
+            hapticsEnabled={hapticsEnabled}
+            router={router}
         />
-    );
+    ), [colors, hapticsEnabled, router]);
 
     return (
         <ThemedView style={styles.container}>
@@ -237,14 +261,6 @@ const styles = StyleSheet.create({
         paddingHorizontal: 40,
         alignItems: 'center',
         marginTop: -60, // Adjust to account for header height and feel truly centered
-    },
-    emptyIconContainer: {
-        width: 88,
-        height: 88,
-        borderRadius: 44,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 20,
     },
     emptyTitle: {
         fontSize: 20,

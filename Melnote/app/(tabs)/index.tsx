@@ -1,13 +1,10 @@
-import { View, StyleSheet, FlatList, TouchableOpacity, Modal, TextInput, Platform, ScrollView, Dimensions, Alert, DeviceEventEmitter, Pressable, BackHandler, DimensionValue } from 'react-native';
+import { View, StyleSheet, FlatList, TouchableOpacity, Modal, Platform, ScrollView, DeviceEventEmitter, Pressable, BackHandler, DimensionValue } from 'react-native';
 import { KeyboardAwareScrollView, useKeyboardState } from 'react-native-keyboard-controller';
-import Animated, { FadeInDown, Layout, FadeIn, FadeOut, SlideInDown, FadeOutDown, ZoomIn, useSharedValue, useAnimatedScrollHandler, runOnJS, Easing } from 'react-native-reanimated';
-import { BlurView } from 'expo-blur';
-import { LinearGradient } from 'expo-linear-gradient';
+import Animated, { FadeInDown, FadeIn, FadeOut, SlideInDown, FadeOutDown, ZoomIn, useSharedValue, useAnimatedScrollHandler, runOnJS, Easing } from 'react-native-reanimated';
 import { StatusBar } from 'expo-status-bar';
 import { ThemedView } from '../../components/ui/ThemedView';
 import { ThemedText } from '../../components/ui/ThemedText';
 import { Input } from '../../components/ui/Input';
-import { Card } from '../../components/ui/Card';
 import { Avatar } from '../../components/ui/Avatar';
 import { DatePicker } from '../../components/ui/DatePicker';
 import { useRouter } from 'expo-router';
@@ -17,15 +14,13 @@ import { GroupRepository, Group } from '../../db/repositories/GroupRepository';
 import { JournalRepository } from '../../db/repositories/JournalRepository';
 import { SettingsRepository } from '../../db/repositories/SettingsRepository';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useFocusEffect, useNavigation } from 'expo-router/react-navigation';
+import { useFocusEffect } from 'expo-router/react-navigation';
 import { Button } from '../../components/ui/Button';
-import { Plus, MagnifyingGlass as Search, SearchNoResults, Camera, X, Check, CaretRight, CaretLeft, Faders as Filter, Gear as Settings, User as UserIcon, Folder, Calendar, PencilLine as PenLine, Bell, Book, PushPin, MapPin } from '@/components/ui/Icon';
+import { MagnifyingGlass as Search, SearchNoResults, Camera, X, Check, CaretLeft, Faders as Filter, Gear as Settings, User as UserIcon, Book, PushPin } from '@/components/ui/Icon';
 import { Skeleton } from '../../components/ui/Skeleton';
-import { Colors } from '../../constants/Colors';
 import { DesignSystem } from '../../constants/DesignSystem';
 import { Typography } from '../../constants/Typography';
 import { SearchBar } from '../../components/ui/SearchBar';
-import { Badge } from '../../components/ui/Badge';
 import * as Haptics from 'expo-haptics';
 import { useAppTheme } from '../../hooks/useAppTheme';
 import { GroupSelector, GroupSelectorHandle } from '../../components/GroupSelector';
@@ -34,7 +29,6 @@ import { useModalPresence } from '../../components/ui/useModalPresence';
 import { useFullScreenModal } from '../../components/ui/useFullScreenModal';
 import { PersonPickerModal } from '../../components/person/PersonPickerModal';
 import { QuickNoteModal } from '../../components/person/QuickNoteModal';
-import { ManageGroupsModal } from '../../components/person/ManageGroupsModal';
 import { GalleryPersonCard } from '../../components/person/GalleryPersonCard';
 import { DashboardGroupCard } from '../../components/person/DashboardGroupCard';
 import { ManageGroupMembersModal } from '../../components/person/ManageGroupMembersModal';
@@ -67,7 +61,7 @@ const formatLocalDateShort = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 };
 
-const PersonItem = memo(({ item, index, colors, theme, onPress, onLongPress }: any) => (
+const PersonItem = memo(({ item, colors, onPress, onLongPress }: any) => (
     <View>
         <ScalePressable
             onPress={onPress}
@@ -104,12 +98,15 @@ const PersonItem = memo(({ item, index, colors, theme, onPress, onLongPress }: a
     </View>
 ));
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-
 // Memory Lane card. Kept as its own component so it can hold a ref for the
 // shared card frame (kept for layout stability, the note opens with the
 // standard screen pop).
 const MemoryLaneCard = memo(({ entry, colors, router }: any) => {
+    // The card shows 2 lines; memoising keeps the markdown pass from running
+    // again every time the dashboard section re-renders.
+    const preview = useMemo(() => markdownPreviewText(entry.content), [entry.content]);
+    const dateLabel = useMemo(() => formatLocalDateShort(entry.date), [entry.date]);
+
     return (
         <ScalePressable
             style={[styles.highlightCard, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 0 }]}
@@ -119,14 +116,14 @@ const MemoryLaneCard = memo(({ entry, colors, router }: any) => {
                 <View style={[styles.highlightTitleRow, { marginBottom: 4 }]}>
                     <Book size={14} color={colors.tint} weight="bold" />
                     <ThemedText type="tiny" style={{ color: colors.tint, fontWeight: '800', marginLeft: 6 }}>
-                        {formatLocalDateShort(entry.date)}
+                        {dateLabel}
                     </ThemedText>
                 </View>
                 {entry.title && (
                     <ThemedText type="defaultSemiBold" numberOfLines={1} style={{ fontSize: 13, marginBottom: 4 }}>{entry.title}</ThemedText>
                 )}
                 <ThemedText type="small" numberOfLines={2} style={{ color: colors.secondary, fontSize: 12, lineHeight: 18 }}>
-                    {markdownPreviewText(entry.content)}
+                    {preview}
                 </ThemedText>
             </View>
         </ScalePressable>
@@ -227,7 +224,6 @@ export default function PeopleScreen() {
     };
 
     // Add Menu is now handled globally in _layout.tsx
-    const [showGroupAssignModal, setShowGroupAssignModal] = useState(false);
 
     // Add Person Modal State
     const [showAddModal, setShowAddModal] = useState(false);
@@ -247,15 +243,20 @@ export default function PeopleScreen() {
     // Keeps the sheet out of Android's way for the duration of the picker.
     const { generation: pickerGeneration, pick: pickAvatar } = usePickerHost();
 
-    // Group Assignment Modal
-    const [showAssignModal, setShowAssignModal] = useState(false);
-    const [selectedPersonForGroup, setSelectedPersonForGroup] = useState<Person | null>(null);
-    const [selectedPersonGroups, setSelectedPersonGroups] = useState<number[]>([]);
+    // Group Assignment state was removed with the unreachable ManageGroupsModal
+    // instance; group membership is managed via ManageGroupMembersModal.
     const [reconnects, setReconnects] = useState<any[]>([]);
     const [highlights, setHighlights] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isGroupSwitching, setIsGroupSwitching] = useState(false);
-    const [shouldAnimate, setShouldAnimate] = useState(true);
+    // A ref, not state: entering animations only matter when a row mounts, so
+    // flipping this must not re-render every visible row.
+    const shouldAnimateRef = useRef(true);
+    const groupAnimTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    useEffect(() => () => {
+        if (groupAnimTimerRef.current) clearTimeout(groupAnimTimerRef.current);
+    }, []);
 
     const [isDashboardActive, setIsDashboardActive] = useState(false);
 
@@ -300,7 +301,6 @@ export default function PeopleScreen() {
 
     const [personToManage, setPersonToManage] = useState<Person | null>(null);
     const [showPersonManageModal, setShowPersonManageModal] = useState(false);
-    const groupAssignPresence = useModalPresence(showGroupAssignModal);
     const personManagePresence = useModalPresence(showPersonManageModal);
     // The Add Person screen animates itself away: Android destroys a native
     // Modal's content the moment `visible` flips, which would leave an empty
@@ -317,7 +317,12 @@ export default function PeopleScreen() {
     const handleQuickNote = async () => {
         if (hapticsEnabled && Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         setPickerMode('note');
-        const sorted = await PersonRepository.getPeopleSortedByNotesFrequency();
+        let sorted: Person[] = allPeople;
+        try {
+            sorted = await PersonRepository.getPeopleSortedByNotesFrequency();
+        } catch (error) {
+            console.error('Failed to sort people by note frequency:', error);
+        }
         setActivitySortedPeople(sorted);
         setShowPersonPicker(true);
     };
@@ -364,11 +369,11 @@ export default function PeopleScreen() {
         setShowAddReminderModal(true);
     };
 
-    const handlePersonLongPress = (person: Person) => {
+    const handlePersonLongPress = useCallback((person: Person) => {
         if (hapticsEnabled && Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         setPersonToManage(person);
         setShowPersonManageModal(true);
-    };
+    }, [hapticsEnabled]);
 
     useEffect(() => {
         const sub1 = DeviceEventEmitter.addListener('globalAction:newPerson', () => setShowAddModal(true));
@@ -399,9 +404,9 @@ export default function PeopleScreen() {
         useCallback(() => {
             // Only animate on the very first time the app is opened, or when changing groups
             if (isFirstViewRef.current) {
-                setShouldAnimate(true);
+                shouldAnimateRef.current = true;
                 const timer = setTimeout(() => {
-                    setShouldAnimate(false);
+                    shouldAnimateRef.current = false;
                     isFirstViewRef.current = false;
                 }, 1500);
                 loadData();
@@ -483,9 +488,12 @@ export default function PeopleScreen() {
                 setPeople(data);
             }
 
-            // Always keep a full list for group assignment, sorted by preference
-            const allData = await PersonRepository.getAll(settings.defaultSort);
-            setAllPeople(allData);
+            // Always keep a full list for group assignment, sorted by preference.
+            // The main view already fetched everyone, so reuse it instead of
+            // running the same full query twice.
+            setAllPeople(selectedGroupId === null ? data : await PersonRepository.getAll(settings.defaultSort));
+        } catch (error) {
+            console.error('Failed to load people:', error);
         } finally {
             setIsLoading(false);
             setIsGroupSwitching(false);
@@ -494,17 +502,20 @@ export default function PeopleScreen() {
 
     const loadPeople = async () => {
         // Re-fetch just people (helper for other ops)
-        let data;
-        if (selectedGroupId === null) {
-            data = await PersonRepository.getAll(settings.defaultSort);
-        } else {
-            data = await GroupRepository.getPeopleInGroup(selectedGroupId, settings.defaultSort);
-        }
-        setPeople(data);
+        try {
+            let data;
+            if (selectedGroupId === null) {
+                data = await PersonRepository.getAll(settings.defaultSort);
+            } else {
+                data = await GroupRepository.getPeopleInGroup(selectedGroupId, settings.defaultSort);
+            }
+            setPeople(data);
 
-        // Always sync allPeople too
-        const all = await PersonRepository.getAll(settings.defaultSort);
-        setAllPeople(all);
+            // Always sync allPeople too (same query when viewing all people).
+            setAllPeople(selectedGroupId === null ? data : await PersonRepository.getAll(settings.defaultSort));
+        } catch (error) {
+            console.error('Failed to refresh people:', error);
+        }
     };
 
     const handleCreateGroup = async (name: string, icon: string, color: string) => {
@@ -528,8 +539,9 @@ export default function PeopleScreen() {
         const groupChanged = id !== selectedGroupId;
 
         if (groupChanged || isSwitchingFromDashboard) {
-            setShouldAnimate(true);
-            setTimeout(() => setShouldAnimate(false), 800);
+            shouldAnimateRef.current = true;
+            if (groupAnimTimerRef.current) clearTimeout(groupAnimTimerRef.current);
+            groupAnimTimerRef.current = setTimeout(() => { shouldAnimateRef.current = false; }, 800);
 
             if (groupChanged) {
                 // Clear only the people list so its switch animation replays.
@@ -562,32 +574,6 @@ export default function PeopleScreen() {
         const members = await GroupRepository.getPeopleInGroup(group.id, settings.defaultSort);
         setModalMembers(members);
         setShowManageGroupModal(true);
-    };
-
-    const openAssignData = async (person: Person) => {
-        if (hapticsEnabled && Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        setSelectedPersonForGroup(person);
-        const pGroups = await GroupRepository.getGroupsForPerson(person.id);
-        setSelectedPersonGroups(pGroups.map(g => g.id));
-        setShowAssignModal(true);
-    };
-
-    const toggleGroupAssignment = async (groupId: number) => {
-        if (!selectedPersonForGroup) return;
-        if (hapticsEnabled && Platform.OS !== 'web') Haptics.selectionAsync();
-
-        if (selectedPersonGroups.includes(groupId)) {
-            await GroupRepository.removePersonFromGroup(selectedPersonForGroup.id, groupId);
-            setSelectedPersonGroups(prev => prev.filter(id => id !== groupId));
-        } else {
-            await GroupRepository.addPersonToGroup(selectedPersonForGroup.id, groupId);
-            setSelectedPersonGroups(prev => [...prev, groupId]);
-        }
-        // If we are currently viewing this group, we might need to refresh, but let's wait until modal close or force it? 
-        // Logic: if we remove from current group, list should update.
-        if (selectedGroupId === groupId) {
-            // We'll reload on modal close or effect
-        }
     };
 
     const pickImage = async () => {
@@ -670,9 +656,10 @@ export default function PeopleScreen() {
     }, [settings.defaultSort]);
 
     const filteredPeople = useMemo(() => {
+        const q = search.trim().toLowerCase();
         return people.filter(p =>
-            p.name.toLowerCase().includes(search.toLowerCase()) ||
-            (p.elevatorPitch && p.elevatorPitch.toLowerCase().includes(search.toLowerCase()))
+            p.name.toLowerCase().includes(q) ||
+            (p.elevatorPitch ? p.elevatorPitch.toLowerCase().includes(q) : false)
         ).sort((a, b) => {
             if (a.isPinned && !b.isPinned) return -1;
             if (!a.isPinned && b.isPinned) return 1;
@@ -704,7 +691,7 @@ export default function PeopleScreen() {
         if (isGallery) {
             return (
                 <Animated.View
-                    entering={shouldAnimate ? FadeInDown.delay(Math.min(index, 5) * 55).duration(440).springify().damping(22).stiffness(160).mass(0.9) : undefined}
+                    entering={shouldAnimateRef.current ? FadeInDown.delay(Math.min(index, 5) * 55).duration(440).springify().damping(22).stiffness(160).mass(0.9) : undefined}
                     style={{ width: galleryItemWidth, paddingHorizontal: galleryGutter, marginBottom: 12 }}
                 >
                     <GalleryPersonCard
@@ -718,12 +705,10 @@ export default function PeopleScreen() {
             );
         }
         return (
-            <Animated.View entering={shouldAnimate ? FadeInDown.delay(Math.min(index, 5) * 55).duration(440).springify().damping(22).stiffness(160).mass(0.9) : undefined}>
+            <Animated.View entering={shouldAnimateRef.current ? FadeInDown.delay(Math.min(index, 5) * 55).duration(440).springify().damping(22).stiffness(160).mass(0.9) : undefined}>
                 <PersonItem
                     item={item}
-                    index={index}
                     colors={colors}
-                    theme={theme}
                     onPress={() => {
                         router.push(`/person/${item.id}`);
                     }}
@@ -731,7 +716,7 @@ export default function PeopleScreen() {
                 />
             </Animated.View>
         );
-    }, [colors, router, theme, isGallery, galleryColumns, galleryGutter, shouldAnimate, openAssignData]);
+    }, [colors, router, isGallery, galleryColumns, galleryGutter, handlePersonLongPress]);
 
     return (
         <ThemedView style={[styles.container, { paddingTop: insets.top }]}>
@@ -780,7 +765,7 @@ export default function PeopleScreen() {
                 key={isGallery && !isDashboardActive ? `gallery-view-${galleryColumns}` : 'list-view'}
                 numColumns={isGallery && !isDashboardActive ? galleryColumns : 1}
                 columnWrapperStyle={isGallery && !isDashboardActive ? { marginHorizontal: -galleryGutter, justifyContent: 'flex-start' } : undefined}
-                keyExtractor={(item, index) => `person-${item.id}-${index}`}
+                keyExtractor={(item) => `person-${item.id}`}
                 renderItem={renderItem}
                 contentContainerStyle={[
                     styles.list,
@@ -1168,17 +1153,6 @@ export default function PeopleScreen() {
                 initialAddingMode={initialManageAddingMode}
             />
 
-            <ManageGroupsModal
-                visible={showAssignModal}
-                onClose={() => {
-                    setShowAssignModal(false);
-                    loadPeople();
-                }}
-                personName={selectedPersonForGroup?.name || ''}
-                allGroups={groups}
-                personGroups={groups.filter(g => selectedPersonGroups.includes(g.id))}
-                onToggleGroup={toggleGroupAssignment}
-            />
             {/* Sort Menu Dropdown Overlay */}
             {showSortMenu && (
                 <View style={styles.addMenuOverlay}>
@@ -1257,94 +1231,6 @@ export default function PeopleScreen() {
                 onDelete={confirmDeleteGroup}
             />
 
-            {/* Add People to Group Modal */}
-            <Modal visible={groupAssignPresence.mounted} transparent animationType="none" onRequestClose={() => setShowGroupAssignModal(false)} statusBarTranslucent>
-                {groupAssignPresence.showContent && (
-                <View style={styles.modalOverlay}>
-                    <Animated.View
-                        entering={FadeIn.duration(250).easing(Easing.bezier(0.05, 0.7, 0.1, 1.0))}
-                        exiting={FadeOut.duration(220)}
-                        style={StyleSheet.absoluteFill}
-                    >
-                        <BlurView
-                            intensity={theme === 'dark' ? 40 : 20}
-                            tint={theme === 'dark' ? 'dark' : 'light'}
-                            style={StyleSheet.absoluteFill}
-                        />
-                        <View style={[StyleSheet.absoluteFill, { backgroundColor: theme === 'dark' ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.2)' }]} />
-                    </Animated.View>
-                    <TouchableOpacity
-                        style={{ flex: 1 }}
-                        activeOpacity={1}
-                        onPress={() => {
-                            setShowGroupAssignModal(false);
-                            if (groupToManage) setShowManageGroupModal(true);
-                        }}
-                    >
-                        <Animated.View
-                            entering={SlideInDown.duration(320).springify().damping(24).stiffness(240).mass(0.9)}
-                            exiting={FadeOutDown.duration(260).easing(Easing.bezier(0.4, 0, 0.5, 1))}
-                            style={[styles.bottomSheet, { backgroundColor: colors.card, paddingBottom: 100 + insets.bottom + 24 }]}
-                        >
-                            <View style={styles.sheetHeader}>
-                                <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border, marginBottom: 12 }} />
-                                <ThemedText type="defaultSemiBold">Add People to Group</ThemedText>
-                                <ThemedText style={{ opacity: 0.5, fontSize: 12 }}>
-                                    {groups.find(g => g.id === (groupToManage?.id || selectedGroupId))?.name}
-                                </ThemedText>
-                            </View>
-
-                            <ScrollView style={{ maxHeight: 400 }}>
-                                {allPeople.map(person => {
-                                    const targetId = groupToManage?.id || selectedGroupId;
-                                    // Robust check for membership
-                                    const isCurrentlyInGroup = groupToManage
-                                        ? modalMembers.some(m => m.id === person.id)
-                                        : people.some(p => p.id === person.id);
-
-                                    return (
-                                        <TouchableOpacity
-                                            key={person.id}
-                                            style={[styles.groupOption, { borderBottomColor: colors.border, borderBottomWidth: 1 }]}
-                                            onPress={async () => {
-                                                const idToUse = groupToManage?.id || selectedGroupId;
-                                                if (!idToUse) return;
-
-                                                if (isCurrentlyInGroup) {
-                                                    await GroupRepository.removePersonFromGroup(person.id, idToUse);
-                                                } else {
-                                                    await GroupRepository.addPersonToGroup(person.id, idToUse);
-                                                }
-                                                if (hapticsEnabled && Platform.OS !== 'web') Haptics.selectionAsync();
-                                                await loadPeople();
-                                                // If we came from Manage Modal, keep it updated?
-                                                if (groupToManage) {
-                                                    const members = await GroupRepository.getPeopleInGroup(groupToManage.id, settings.defaultSort);
-                                                    setModalMembers(members);
-                                                }
-                                            }}
-                                        >
-                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                                                <Avatar name={person.name} uri={person.avatarUri} size={36} />
-                                                <ThemedText>{person.name}</ThemedText>
-                                            </View>
-                                            {isCurrentlyInGroup && (
-                                                <Check size={18} color={colors.tint} />
-                                            )}
-                                        </TouchableOpacity>
-                                    );
-                                })}
-                                {allPeople.length === 0 && (
-                                    <View style={{ padding: 20, alignItems: 'center' }}>
-                                        <ThemedText style={{ opacity: 0.5 }}>No people in your network yet.</ThemedText>
-                                    </View>
-                                )}
-                            </ScrollView>
-                        </Animated.View>
-                    </TouchableOpacity>
-                </View>
-                )}
-            </Modal>
             {/* Person Manage Bottom Sheet */}
             <Modal
                 visible={personManagePresence.mounted}
@@ -1418,25 +1304,6 @@ export default function PeopleScreen() {
         </ThemedView>
     );
 }
-
-function Label({ text }: { text: string }) {
-    return (
-        <ThemedText style={styles.label}>{text}</ThemedText>
-    );
-}
-
-
-function UsersIcon({ size, color }: { size: number; color: string }) {
-    return (
-        <View style={{ opacity: 0.5 }}>
-            <UserIcon size={size} color={color} />
-        </View>
-    );
-}
-
-// Add these to styles
-// ...
-
 
 const styles = StyleSheet.create({
     container: {
@@ -1535,14 +1402,6 @@ const styles = StyleSheet.create({
     emptyKeyboardShift: {
         transform: [{ translateY: -DesignSystem.spacing['3xl'] }],
     },
-    emptyIconContainer: {
-        width: 72,
-        height: 72,
-        borderRadius: 36,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 16,
-    },
     emptyTitle: {
         fontSize: 20,
         marginTop: 6,
@@ -1567,13 +1426,6 @@ const styles = StyleSheet.create({
     fullScreenPage: {
         flex: 1,
     },
-    sheetIndicator: {
-        width: '100%',
-        height: 12,
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginTop: 8,
-    },
     handleIndicator: {
         width: 36,
         height: 5,
@@ -1595,9 +1447,6 @@ const styles = StyleSheet.create({
         height: 48,
         justifyContent: 'center',
         alignItems: 'center',
-    },
-    fullScreenContent: {
-        flex: 1,
     },
     fullScreenAvatarSection: {
         alignItems: 'center',
@@ -1648,56 +1497,11 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
     },
-    highlightDateBadge: {
-        backgroundColor: 'rgba(0,0,0,0.05)',
-        alignSelf: 'flex-start',
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 8,
-    },
-    highlightText: {
-        fontSize: 15,
-        lineHeight: 22,
-        fontStyle: 'italic',
-        marginTop: 8,
-        flex: 1,
-    },
-    highlightFooter: {
-        alignItems: 'flex-end',
-    },
     reconnectCard: {
         width: 200,
         borderRadius: 20,
         padding: 14,
         ...DesignSystem.shadows.sm,
-    },
-    listHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginTop: 24,
-        marginBottom: 12,
-        paddingHorizontal: 4,
-    },
-    countBadge: {
-        marginLeft: 8,
-        paddingHorizontal: 6,
-        paddingVertical: 2,
-        borderRadius: 8,
-    },
-    sectionHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 12,
-        paddingRight: 4,
-    },
-    label: {
-        fontSize: 12,
-        fontWeight: '800',
-        marginBottom: 8,
-        opacity: 0.5,
-        letterSpacing: 0,
-        lineHeight: 16,
     },
     modalOverlay: {
         flex: 1,
@@ -1722,36 +1526,8 @@ const styles = StyleSheet.create({
         gap: 12,
         marginTop: 10,
     },
-    groupOption: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingVertical: 16,
-    },
     addMenuOverlay: {
         ...StyleSheet.absoluteFill,
         zIndex: 999,
-    },
-    addMenu: {
-        position: 'absolute',
-        right: DesignSystem.spacing.lg,
-        width: 240,
-        borderRadius: 20,
-        padding: 8,
-        zIndex: 1000,
-    },
-    addMenuItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: 12,
-        borderRadius: 12,
-        gap: 12,
-    },
-    addMenuIcon: {
-        width: 36,
-        height: 36,
-        borderRadius: 12,
-        justifyContent: 'center',
-        alignItems: 'center',
     },
 });

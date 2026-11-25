@@ -1,16 +1,14 @@
 
-import React, { memo } from 'react';
-import { View, StyleSheet, TouchableOpacity, Animated as RNAnimated, Platform } from 'react-native';
+import React, { memo, useCallback } from 'react';
+import { View, StyleSheet, Animated as RNAnimated } from 'react-native';
 import Animated, { FadeInDown, Layout } from 'react-native-reanimated';
 import { ScalePressable } from '../ui/ScalePressable';
 import { Swipeable } from 'react-native-gesture-handler';
 import { ThemedText } from '../ui/ThemedText';
 import { Card } from '../ui/Card';
-import { Colors } from '../../constants/Colors';
 import { Typography } from '../../constants/Typography';
 import { BookOpen, Trash } from '@/components/ui/Icon';
 import { useRouter } from 'expo-router';
-import * as Haptics from 'expo-haptics';
 import { useAppTheme } from '../../hooks/useAppTheme';
 import type { AcrylicPalette } from '../../utils/acrylic';
 import { markdownPreviewText } from '../../utils/markdownConverter';
@@ -74,7 +72,9 @@ export function JournalsTab({ journals, personName, onDelete, isAcrylic, acrylic
     const router = useRouter();
     const { colors, hapticsEnabled } = useAppTheme();
 
-    const renderRightActions = (id: number, dragX: RNAnimated.AnimatedInterpolation<number>) => {
+    // Kept stable so the memoised JournalCard is not re-rendered (and its
+    // markdown preview not re-parsed) on every parent render.
+    const renderRightActions = useCallback((id: number, dragX: RNAnimated.AnimatedInterpolation<number>) => {
         const trans = dragX.interpolate({
             inputRange: [-80, 0],
             outputRange: [1, 0],
@@ -102,7 +102,7 @@ export function JournalsTab({ journals, personName, onDelete, isAcrylic, acrylic
                 </RNAnimated.View>
             </ScalePressable>
         );
-    };
+    }, [colors.error, onDelete]);
 
     return (
         <View style={styles.entriesSection}>
@@ -143,16 +143,6 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingVertical: 40,
         opacity: 0.8,
-    },
-    emptyCircle: {
-        width: 64,
-        height: 64,
-        borderRadius: 32,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 8,
-    },
-    entryCard: {
     },
     entryHeader: {
         flexDirection: 'row',

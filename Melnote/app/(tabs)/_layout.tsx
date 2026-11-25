@@ -5,7 +5,7 @@ import { Platform, View, TouchableOpacity, StyleSheet, Modal, DeviceEventEmitter
 import * as Haptics from 'expo-haptics';
 import { ScalePressable } from '../../components/ui/ScalePressable';
 import { useSettings } from '../../store/SettingsContext';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Animated, { FadeIn, FadeOut, FadeInUp, FadeInDown, FadeInLeft, FadeOutDown, SlideInDown, SlideOutDown, ZoomIn, ZoomOut, useSharedValue, useAnimatedStyle, withSpring, Easing } from 'react-native-reanimated';
 import { BlurView } from 'expo-blur';
 import { DesignSystem } from '../../constants/DesignSystem';
@@ -69,7 +69,6 @@ function TabButton({ route, isFocused, Icon, activeColor, inactiveColor, onPress
 
     return (
         <ScalePressable
-            key={route.key}
             onPress={onPress}
             scale={true}
             scaleTo={0.84}
@@ -149,9 +148,17 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
 
     const barBg = theme === 'dark' ? (colors.background === '#000000' ? '#121110' : '#181818') : colors.background;
 
+    // The action runs after the menu has animated out; the timer is tracked so
+    // a navigation can never fire after the bar is gone.
+    const actionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    useEffect(() => () => {
+        if (actionTimer.current) clearTimeout(actionTimer.current);
+    }, []);
+
     const handleAction = (action: string) => {
         setShowAddMenu(false);
-        setTimeout(() => {
+        if (actionTimer.current) clearTimeout(actionTimer.current);
+        actionTimer.current = setTimeout(() => {
             if (action === 'quickJournal') {
                 router.push({ pathname: '/journal/[id]', params: { id: 'new', edit: 'true' } });
             } else {
@@ -293,7 +300,7 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
 
                             const onPress = () => {
                                 if (hapticsEnabled && Platform.OS !== 'web') {
-                                    Haptics.selectionAsync();
+                                    Haptics.selectionAsync().catch(() => {});
                                 }
                                 const event = navigation.emit({
                                     type: 'tabPress',

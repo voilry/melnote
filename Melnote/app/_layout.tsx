@@ -34,7 +34,6 @@ import { useMigrations } from 'drizzle-orm/expo-sqlite/migrator';
 import { db } from '../db/index';
 import migrations from '../drizzle/migrations';
 import { PersonRepository } from '../db/repositories/PersonRepository';
-import { Colors } from '../constants/Colors';
 import { Typography } from '../constants/Typography';
 import { SettingsProvider, useSettings } from '../store/SettingsContext';
 import { useAppTheme } from '../hooks/useAppTheme';
@@ -87,6 +86,35 @@ function RootLayoutContent() {
 
   const { success: migrationSuccess, error: migrationError } = useMigrations(db, migrations);
 
+  // Custom Navigation Themes to match our App Theme. They are memoised so a
+  // re-render of this layout does not hand React Navigation a new theme
+  // object and re-render every screen in the stack.
+  const MyLightTheme = useMemo<Theme>(() => ({
+    ...DefaultTheme,
+    colors: {
+      ...DefaultTheme.colors,
+      primary: appColors.tint,
+      background: appColors.background,
+      card: appColors.card,
+      text: appColors.text,
+      border: appColors.border,
+      notification: appColors.error,
+    },
+  }), [appColors]);
+
+  const MyDarkTheme = useMemo<Theme>(() => ({
+    ...DarkTheme,
+    colors: {
+      ...DarkTheme.colors,
+      primary: appColors.tint,
+      background: appColors.background,
+      card: appColors.card,
+      text: appColors.text,
+      border: appColors.border,
+      notification: appColors.error,
+    },
+  }), [appColors]);
+
   const isIgnorableMigrationError = useMemo(() => {
     if (!migrationError) return false;
     const msg = migrationError.message || String(migrationError);
@@ -130,12 +158,6 @@ function RootLayoutContent() {
   }, [migrationError, isIgnorableMigrationError]);
 
   useEffect(() => {
-    if (migrationSuccess) {
-      // Reverted ALTER TABLE migrations
-    }
-  }, [migrationSuccess]);
-
-  useEffect(() => {
     if (Platform.OS === 'android') {
       const hideNavBar = async () => {
         try {
@@ -157,18 +179,24 @@ function RootLayoutContent() {
     }
   }, []);
 
+  const splashTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     async function prepare() {
       // Wait for everything: Fonts, Migrations, and Settings
       if ((loaded || fontError) && (hasMigrationFinished || (migrationError && !isIgnorableMigrationError)) && !settingsLoading) {
         // A small delay (50ms) ensures the view has actually painted the internal theme color
-        setTimeout(async () => {
+        if (splashTimeout.current) clearTimeout(splashTimeout.current);
+        splashTimeout.current = setTimeout(async () => {
           await SplashScreen.hideAsync();
           setIsReady(true);
         }, 50);
       }
     }
     prepare();
+    return () => {
+      if (splashTimeout.current) clearTimeout(splashTimeout.current);
+    };
   }, [loaded, fontError, hasMigrationFinished, migrationError, isIgnorableMigrationError, settingsLoading]);
 
   if (fontError || (migrationError && !isIgnorableMigrationError)) {
@@ -185,33 +213,6 @@ function RootLayoutContent() {
   if (!isReady) {
     return <View style={{ flex: 1, backgroundColor: '#c9803a' }} />;
   }
-
-  // Custom Navigation Themes to match our App Theme
-  const MyLightTheme: Theme = {
-    ...DefaultTheme,
-    colors: {
-      ...DefaultTheme.colors,
-      primary: appColors.tint,
-      background: appColors.background,
-      card: appColors.card,
-      text: appColors.text,
-      border: appColors.border,
-      notification: appColors.error,
-    },
-  };
-
-  const MyDarkTheme: Theme = {
-    ...DarkTheme,
-    colors: {
-      ...DarkTheme.colors,
-      primary: appColors.tint,
-      background: appColors.background,
-      card: appColors.card,
-      text: appColors.text,
-      border: appColors.border,
-      notification: appColors.error,
-    },
-  };
 
   return (
     <View style={{ flex: 1, backgroundColor: appColors.background }} key={refreshKey}>

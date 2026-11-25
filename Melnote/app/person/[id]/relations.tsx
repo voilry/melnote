@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
     View, StyleSheet, ScrollView, Modal,
     Platform, Pressable,
@@ -62,6 +62,7 @@ export default function RelationsScreen() {
     const personId = Number(id);
 
     const [person, setPerson] = useState<Person | null>(null);
+    const [loadFailed, setLoadFailed] = useState(false);
     const [relationships, setRelationships] = useState<Relationship[]>([]);
     const [allPeople, setAllPeople] = useState<Person[]>([]);
     const [allRelationships, setAllRelationships] = useState<Relationship[]>([]);
@@ -85,21 +86,31 @@ export default function RelationsScreen() {
 
     const loadData = async () => {
         const generation = ++loadGeneration.current;
-        const p = await PersonRepository.getById(personId);
-        if (generation !== loadGeneration.current) return;
-        if (!p) return;
+        try {
+            const p = await PersonRepository.getById(personId);
+            if (generation !== loadGeneration.current) return;
+            if (!p) {
+                setLoadFailed(true);
+                return;
+            }
 
-        const [rels, people, allRels] = await Promise.all([
-            RelationshipRepository.getForPerson(personId),
-            PersonRepository.getAll(),
-            RelationshipRepository.getAll()
-        ]);
-        if (generation !== loadGeneration.current) return;
+            const [rels, people, allRels] = await Promise.all([
+                RelationshipRepository.getForPerson(personId),
+                PersonRepository.getAll(),
+                RelationshipRepository.getAll()
+            ]);
+            if (generation !== loadGeneration.current) return;
 
-        setPerson(p);
-        setRelationships(rels);
-        setAllPeople(people.filter(x => x.id !== personId));
-        setAllRelationships(allRels);
+            setPerson(p);
+            setRelationships(rels);
+            setAllPeople(people.filter(x => x.id !== personId));
+            setAllRelationships(allRels);
+            setLoadFailed(false);
+        } catch (error) {
+            // Without this the screen would stay on the blank loading view.
+            console.error('Failed to load connections:', error);
+            if (generation === loadGeneration.current) setLoadFailed(true);
+        }
     };
 
     useEffect(() => {
@@ -138,15 +149,25 @@ export default function RelationsScreen() {
         return relationships.filter(r => r.relationType?.trim().toLowerCase() === selectedCategory.toLowerCase());
     }, [relationships, selectedCategory]);
 
-    const getOtherPerson = (rel: Relationship): Person | undefined => {
-        const otherId = rel.sourcePersonId === personId ? rel.targetPersonId : rel.sourcePersonId;
-        return allPeople.find(p => p.id === otherId);
-    };
+    // A lookup map keeps the per-row "other person" resolution O(1) instead of
+    // scanning the whole people list for every row on every render.
+    const peopleById = useMemo(() => {
+        const map = new Map<number, Person>();
+        allPeople.forEach(p => map.set(p.id, p));
+        return map;
+    }, [allPeople]);
 
-    const alreadyLinkedIds = relationships.map(r =>
-        r.sourcePersonId === personId ? r.targetPersonId : r.sourcePersonId
-    );
-    const availablePeople = allPeople.filter(p => !alreadyLinkedIds.includes(p.id));
+    const getOtherPerson = useCallback((rel: Relationship): Person | undefined => {
+        const otherId = rel.sourcePersonId === personId ? rel.targetPersonId : rel.sourcePersonId;
+        return peopleById.get(otherId);
+    }, [peopleById, personId]);
+
+    const availablePeople = useMemo(() => {
+        const linked = new Set(relationships.map(r =>
+            r.sourcePersonId === personId ? r.targetPersonId : r.sourcePersonId
+        ));
+        return allPeople.filter(p => !linked.has(p.id));
+    }, [allPeople, relationships, personId]);
 
     // ─── Actions ─────────────────────────────────────────────────────────────
     const handleSelectTarget = (target: Person) => {
@@ -177,12 +198,15 @@ export default function RelationsScreen() {
 
     const handleDelete = async (relId: number) => {
         if (hapticsEnabled && Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        // Optimistic removal so the row disappears with the swipe; a failed
+        // delete reloads to restore reality.
+        setRelationships(prev => prev.filter(r => r.id !== relId));
         try {
             await RelationshipRepository.delete(relId);
             DeviceEventEmitter.emit('showToast', { message: 'Connection unlinked' });
-            loadData();
         } catch {
             DeviceEventEmitter.emit('showToast', { message: 'Could not unlink this connection' });
+            loadData();
         }
     };
 
@@ -218,6 +242,33 @@ export default function RelationsScreen() {
             </ScalePressable>
         );
     };
+
+    if (loadFailed && !person) {
+        return (
+            <ThemedView style={[styles.container, styles.centered]}>
+                <Stack.Screen options={{ headerShown: false }} />
+                <ThemedText style={styles.errorTitle}>Connections unavailable</ThemedText>
+                <ThemedText style={[styles.errorBody, { color: colors.textSecondary }]}>
+                    This profile may have been deleted, or something went wrong while reading it.
+                </ThemedText>
+                <ScalePressable
+                    onPress={() => {
+                        setLoadFailed(false);
+                        loadData();
+                    }}
+                    style={[styles.retryButton, { backgroundColor: colors.tint }]}
+                    innerStyle={{ borderRadius: DesignSystem.radius.full }}
+                    scaleTo={0.96}
+                    accessibilityRole="button"
+                    accessibilityLabel="Try loading the connections again"
+                >
+                    <ThemedText style={[styles.retryButtonText, { color: colors.tintContrast }]}>
+                        Try again
+                    </ThemedText>
+                </ScalePressable>
+            </ThemedView>
+        );
+    }
 
     if (!person) return <ThemedView style={{ flex: 1 }} />;
 
@@ -714,6 +765,35 @@ export default function RelationsScreen() {
 
 const styles = StyleSheet.create({
     container: { flex: 1 },
+    centered: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 28,
+    },
+    errorTitle: {
+        fontSize: 20,
+        lineHeight: 26,
+        letterSpacing: -0.4,
+        textAlign: 'center',
+        fontFamily: Typography.fontFamily.serif,
+    },
+    errorBody: {
+        marginTop: 8,
+        fontSize: 13.5,
+        lineHeight: 19,
+        textAlign: 'center',
+        fontFamily: Typography.fontFamily.regular,
+    },
+    retryButton: {
+        marginTop: 20,
+        paddingHorizontal: 22,
+        paddingVertical: 12,
+        borderRadius: DesignSystem.radius.full,
+    },
+    retryButtonText: {
+        fontSize: 14.5,
+        fontFamily: Typography.fontFamily.bold,
+    },
 
     // Header
     header: { paddingBottom: 0 },

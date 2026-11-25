@@ -79,12 +79,18 @@ export default function JournalEditorScreen() {
         return null;
     });
     const [taggedPeople, setTaggedPeople] = useState<any[]>([]);
+    // Set when the entry cannot be read, so the screen can say so instead of
+    // staying on an empty background forever.
+    const [loadFailed, setLoadFailed] = useState(false);
     // @mention machinery: all connections for query filtering, plus the
     // activity-ranked subset shown for a bare '@' (most-tagged/most-reminded
     // first, via the existing getPeopleSortedByActivity system).
     const [persons, setPersons] = useState<MentionPerson[]>([]);
     const [topPersons, setTopPersons] = useState<MentionPerson[]>([]);
     const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+    // Same name list is handed to both the editor and the reader; deriving it
+    // once keeps the arrays identity-stable across renders.
+    const mentionNames = useMemo(() => persons.map(p => p.name), [persons]);
 
     const [isEditing, setIsEditing] = useState(() => edit === 'true' || id === 'new');
     const [title, setTitle] = useState('');
@@ -173,7 +179,7 @@ export default function JournalEditorScreen() {
 
     const triggerHaptic = (style: Haptics.ImpactFeedbackStyle = Haptics.ImpactFeedbackStyle.Light) => {
         if (hapticsEnabled && Platform.OS !== 'web') {
-            Haptics.impactAsync(style);
+            Haptics.impactAsync(style).catch(() => {});
         }
     };
 
@@ -302,9 +308,12 @@ export default function JournalEditorScreen() {
                 const tagIds = tags.map((t: any) => t.person.id);
                 setSelectedPeople(tagIds);
                 setOriginalSelectedPeople(tagIds);
+            } else {
+                setLoadFailed(true);
             }
         } catch (error) {
             console.error('Failed to load journal:', error);
+            setLoadFailed(true);
         }
     };
 
@@ -423,7 +432,7 @@ export default function JournalEditorScreen() {
         setEditorHtml(markdownToHtml(newMarkdown));
 
         if (hapticsEnabled && Platform.OS !== 'web') {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
         }
 
         if (journalId && id !== 'new') {
@@ -437,7 +446,10 @@ export default function JournalEditorScreen() {
                 console.error('Failed to auto-save checklist toggle in journal reader:', error);
             }
         }
-    }, [journalId, id, hapticsEnabled]);
+        // The title is part of what gets written here, so it has to be read
+        // from the latest render - otherwise a checklist toggle in the reader
+        // would write back the title as it was before the last edit.
+    }, [journalId, id, hapticsEnabled, title, journal]);
 
     const handleDelete = async (silent = false) => {
         if (id === 'new') {
@@ -485,8 +497,31 @@ export default function JournalEditorScreen() {
 
     if (!journal) {
         return (
-            <ThemedView style={styles.container}>
+            <ThemedView style={[styles.container, loadFailed && styles.notFound]}>
                 <Stack.Screen options={{ headerShown: false }} />
+                {loadFailed && (
+                    <>
+                        <ThemedText style={styles.notFoundTitle}>Journal entry unavailable</ThemedText>
+                        <ThemedText style={[styles.notFoundBody, { color: colors.textSecondary }]}>
+                            This entry may have been deleted, or something went wrong while reading it.
+                        </ThemedText>
+                        <ScalePressable
+                            onPress={() => {
+                                if (router.canGoBack()) router.back();
+                                else router.replace('/');
+                            }}
+                            style={[styles.notFoundButton, { backgroundColor: colors.tint }]}
+                            innerStyle={{ borderRadius: 18 }}
+                            scaleTo={0.96}
+                            accessibilityRole="button"
+                            accessibilityLabel="Go back"
+                        >
+                            <ThemedText style={[styles.notFoundButtonText, { color: colors.tintContrast }]}>
+                                Go back
+                            </ThemedText>
+                        </ScalePressable>
+                    </>
+                )}
             </ThemedView>
         );
     }
@@ -601,7 +636,7 @@ export default function JournalEditorScreen() {
                                 expectedDoc={editorHtml ?? undefined}
                                 sessionToken={sessionToken}
                                 onMentionQuery={setMentionQuery}
-                                mentionNames={persons.map(p => p.name)}
+                                mentionNames={mentionNames}
                                 onTitleChange={(t) => {
                                     setTitle(t);
                                     if (isDataLoadedRef.current) setHasChanges(true);
@@ -646,7 +681,7 @@ export default function JournalEditorScreen() {
                                         content={content}
                                         paddingHorizontal={0}
                                         onContentChange={handleReaderContentChange}
-                                        mentionNames={persons.map(p => p.name)}
+                                        mentionNames={mentionNames}
                                         style={{
                                             fontSize: journalFontSize || 16,
                                             lineHeight: Math.round((journalFontSize || 16) * 1.6)
@@ -873,6 +908,35 @@ const styles = StyleSheet.create({
     headerActions: {
         flexDirection: 'row',
         alignItems: 'center',
+    },
+    notFound: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 28,
+    },
+    notFoundTitle: {
+        fontSize: 20,
+        lineHeight: 26,
+        letterSpacing: -0.4,
+        textAlign: 'center',
+        fontFamily: Typography.fontFamily.serif,
+    },
+    notFoundBody: {
+        marginTop: 8,
+        fontSize: 13.5,
+        lineHeight: 19,
+        textAlign: 'center',
+        fontFamily: Typography.fontFamily.regular,
+    },
+    notFoundButton: {
+        marginTop: 20,
+        paddingHorizontal: 22,
+        paddingVertical: 12,
+        borderRadius: 18,
+    },
+    notFoundButtonText: {
+        fontSize: 14.5,
+        fontFamily: Typography.fontFamily.bold,
     },
     scrollView: {
         flex: 1,

@@ -1,9 +1,8 @@
 import React from 'react';
-import { StyleSheet, ScrollView, Platform } from 'react-native';
+import { StyleSheet, ScrollView, Platform, View } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { ThemedView } from '../../components/ui/ThemedView';
 import { useSettings } from '../../store/SettingsContext';
-import { DesignSystem } from '../../constants/DesignSystem';
 import { Layout, Clock, Sparkles, CaretRight } from '@/components/ui/Icon';
 import { Card } from '../../components/ui/Card';
 import { useAppTheme } from '../../hooks/useAppTheme';
@@ -13,7 +12,6 @@ import * as Haptics from 'expo-haptics';
 import { Toggle } from '../../components/ui/Toggle';
 import { ExpBadge } from '../../components/ui/ExpBadge';
 import { Typography } from '../../constants/Typography';
-import { View } from 'react-native';
 import { ThemedText } from '../../components/ui/ThemedText';
 import { ScalePressable } from '../../components/ui/ScalePressable';
 
@@ -25,7 +23,7 @@ export default function ExtraSettingsScreen() {
 
     const triggerHaptic = (style = Haptics.ImpactFeedbackStyle.Light) => {
         if (hapticsEnabled && Platform.OS !== 'web') {
-            Haptics.impactAsync(style);
+            Haptics.impactAsync(style).catch(() => {});
         }
     };
 
@@ -83,7 +81,7 @@ export default function ExtraSettingsScreen() {
                                     params: { replay: '1' },
                                 });
                             }}
-                            scale={false}
+                            scaleTo={0.97}
                             haptic={false}
                             style={[styles.paddingBox, { paddingVertical: 18 }]}
                             accessibilityRole="button"

@@ -36,7 +36,7 @@ import { ManageGroupsModal } from '../../components/person/ManageGroupsModal';
 import { DeleteModal } from '../../components/ui/DeleteModal';
 import { ScalePressable } from '../../components/ui/ScalePressable';
 import { Button } from '../../components/ui/Button';
-import { Skeleton } from '../../components/ui/Skeleton';
+import { showToast } from '../../components/ui/Toast';
 
 export default function PersonDetailScreen() {
     const { id } = useLocalSearchParams();
@@ -92,7 +92,15 @@ export default function PersonDetailScreen() {
         const generation = ++loadGeneration.current;
         const isStale = () => generation !== loadGeneration.current;
 
-        const p = await PersonRepository.getById(personId);
+        let p: Person | null = null;
+        try {
+            p = await PersonRepository.getById(personId);
+        } catch (error) {
+            // The screen would otherwise stay on the blank loading view forever.
+            console.error('Failed to load profile:', error);
+            if (!isStale()) setIsLoading(false);
+            return;
+        }
         if (isStale()) return;
         if (!p) {
             setPerson(null);
@@ -165,15 +173,20 @@ export default function PersonDetailScreen() {
         if (!person) return;
         const isAssigned = personGroups.some(g => g.id === groupId);
 
-        if (isAssigned) {
-            await GroupRepository.removePersonFromGroup(person.id, groupId);
-        } else {
-            await GroupRepository.addPersonToGroup(person.id, groupId);
-        }
+        try {
+            if (isAssigned) {
+                await GroupRepository.removePersonFromGroup(person.id, groupId);
+            } else {
+                await GroupRepository.addPersonToGroup(person.id, groupId);
+            }
 
-        // Refresh local groups
-        const pg = await GroupRepository.getGroupsForPerson(person.id);
-        setPersonGroups(pg);
+            // Refresh local groups
+            const pg = await GroupRepository.getGroupsForPerson(person.id);
+            setPersonGroups(pg);
+        } catch (error) {
+            console.error('Failed to update group membership:', error);
+            showToast('Could not update group membership');
+        }
     };
 
     const handleDeletePerson = () => {
@@ -181,18 +194,30 @@ export default function PersonDetailScreen() {
     };
 
     const confirmDeletePerson = async () => {
+        const personId = person?.id ?? Number(Array.isArray(id) ? id[0] : id);
         setProfileToDelete(false);
-        await PersonRepository.delete(Number(id));
-        router.back();
+        if (!Number.isFinite(personId)) return;
+        try {
+            await PersonRepository.delete(personId);
+            router.back();
+        } catch (error) {
+            console.error('Failed to delete profile:', error);
+            showToast('Could not delete profile');
+        }
     };
 
 
 
     const handleUpdateProfile = async (data: any) => {
         if (!person) return;
-        await PersonRepository.update(person.id, data);
-        setShowEditModal(false);
-        loadData();
+        try {
+            await PersonRepository.update(person.id, data);
+            setShowEditModal(false);
+            loadData();
+        } catch (error) {
+            console.error('Failed to update profile:', error);
+            showToast('Could not update profile');
+        }
     };
 
     const openNewNote = () => {
@@ -213,16 +238,24 @@ export default function PersonDetailScreen() {
     };
 
     const confirmDeleteEntry = async () => {
-        if (entryToDelete !== null) {
-            await EntryRepository.delete(entryToDelete);
+        if (entryToDelete === null) return;
+        const entryId = entryToDelete;
+        setEntryToDelete(null);
+        // Optimistic removal so the row goes away immediately; a failed
+        // delete reloads to restore reality.
+        setEntries(prev => prev.filter(e => e.id !== entryId));
+        try {
+            await EntryRepository.delete(entryId);
+        } catch (error) {
+            console.error('Failed to delete entry:', error);
+            showToast('Could not delete note');
             loadData();
-            setEntryToDelete(null);
         }
     };
 
     const triggerHaptic = (style = Haptics.ImpactFeedbackStyle.Light) => {
         if (hapticsEnabled && Platform.OS !== 'web') {
-            Haptics.impactAsync(style);
+            Haptics.impactAsync(style).catch(() => {});
         }
     };
 
@@ -231,18 +264,30 @@ export default function PersonDetailScreen() {
     };
 
     const confirmDeleteJournal = async () => {
-        if (journalToDelete !== null) {
-            await JournalRepository.delete(journalToDelete);
+        if (journalToDelete === null) return;
+        const journalId = journalToDelete;
+        setJournalToDelete(null);
+        setJournals(prev => prev.filter(j => j.id !== journalId));
+        try {
+            await JournalRepository.delete(journalId);
+        } catch (error) {
+            console.error('Failed to delete journal entry:', error);
+            showToast('Could not delete journal entry');
             loadData();
-            setJournalToDelete(null);
         }
     };
 
     const confirmDeleteContact = async () => {
-        if (contactToDelete !== null) {
-            await ContactRepository.deleteContact(contactToDelete);
+        if (contactToDelete === null) return;
+        const contactId = contactToDelete;
+        setContactToDelete(null);
+        setContacts(prev => prev.filter(c => c.id !== contactId));
+        try {
+            await ContactRepository.deleteContact(contactId);
+        } catch (error) {
+            console.error('Failed to delete contact:', error);
+            showToast('Could not delete contact');
             loadData();
-            setContactToDelete(null);
         }
     };
 
@@ -471,14 +516,14 @@ export default function PersonDetailScreen() {
                                         key={g.id}
                                         entering={FadeInDown.delay(330 + Math.min(idx, 6) * 16).duration(380).springify().damping(22).stiffness(140).mass(0.85)}
                                     >
-                                        <ScalePressable
-                                            onPress={() => { }} // No action for now but tactile feel
+                                        {/* Not pressable: a chip that scales under the
+                                            finger but does nothing reads as broken. */}
+                                        <View
                                             style={[styles.groupChip, { backgroundColor: groupAcrylicBg, borderColor: 'transparent', paddingVertical: 6, paddingHorizontal: 12 }]}
-                                            innerStyle={{ borderRadius: 12 }}
                                         >
                                             {getGroupIcon(g.icon, colors.tint, 14)}
                                             <ThemedText style={{ fontSize: 13, color: colors.tint, fontWeight: '700', marginLeft: 6 }}>{g.name}</ThemedText>
-                                        </ScalePressable>
+                                        </View>
                                     </Animated.View>
                                 );
                             })}
@@ -769,6 +814,8 @@ function ProfileTabBar({
                         style={styles.tab}
                         innerStyle={{ borderRadius: 10 }}
                         overlayColor="transparent"
+                        accessibilityRole="button"
+                        accessibilityLabel={tab.charAt(0).toUpperCase() + tab.slice(1)}
                     >
                         <View style={styles.tabContent} collapsable={false}>
                             <Icon
@@ -853,7 +900,6 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
     },
-    tabLabel: { fontWeight: '700', fontSize: 13 },
     content: { paddingHorizontal: 20, marginTop: 12 },
     modalOverlay: {
         flex: 1,
@@ -886,26 +932,4 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         borderWidth: 0,
     },
-    bottomSheet: {
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        borderTopLeftRadius: 24,
-        borderTopRightRadius: 24,
-        padding: 24,
-        ...DesignSystem.shadows.xl,
-    },
-    sheetHeader: {
-        alignItems: 'center',
-        marginBottom: 20,
-    },
-    checkCircle: {
-        width: 22,
-        height: 22,
-        borderRadius: 11,
-        borderWidth: 2,
-        justifyContent: 'center',
-        alignItems: 'center',
-    }
 });

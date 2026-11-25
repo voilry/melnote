@@ -6,8 +6,7 @@ import { ThemedView } from '../../components/ui/ThemedView';
 import { ThemedText } from '../../components/ui/ThemedText';
 import { useSettings, ThemeMode } from '../../store/SettingsContext';
 import { Colors } from '../../constants/Colors';
-import { DesignSystem } from '../../constants/DesignSystem';
-import { Sun, Moon, Compass, Cards, TextT, MagicWand, SelectionBackground, PaintBrush, ArrowUp, ArrowDown, List, ArrowsDownUp, Palette, Layout } from '@/components/ui/Icon';
+import { Compass, Cards, TextT, MagicWand, SelectionBackground, PaintBrush, ArrowUp, ArrowDown, List, Palette, Layout } from '@/components/ui/Icon';
 import { Card } from '../../components/ui/Card';
 import { useAppTheme } from '../../hooks/useAppTheme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -585,17 +584,6 @@ const styles = StyleSheet.create({
     sectionTitle: { fontSize: 18, opacity: 0.85, marginBottom: 14, marginLeft: 4 },
     card: { overflow: 'hidden' },
     paddingBox: { padding: 16 },
-    optionRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: 16,
-    },
-    optionLabelGroup: { flexDirection: 'row', alignItems: 'center' },
-    optionLabel: {
-        fontSize: 16,
-        fontFamily: Typography.fontFamily.semibold
-    },
     separator: { height: 1, marginHorizontal: 16, opacity: 0.2 },
     settingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
     settingInfo: { flex: 1, marginRight: 16 },
@@ -647,10 +635,6 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         marginBottom: 8,
-    },
-    visualLabel: {
-        fontSize: 12,
-        fontFamily: Typography.fontFamily.bold,
     },
     miniList: { width: '100%', paddingHorizontal: 10 },
     miniRow: { flexDirection: 'row', alignItems: 'center', height: 16, marginBottom: 4 },

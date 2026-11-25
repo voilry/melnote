@@ -4,7 +4,7 @@ import Animated, { Easing, FadeIn, FadeOut } from 'react-native-reanimated';
 import { ThemedView } from '../components/ui/ThemedView';
 import { ThemedText } from '../components/ui/ThemedText';
 import { MarkdownText } from '../components/ui/MarkdownText';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { PersonRepository } from '../db/repositories/PersonRepository';
 import { EntryRepository } from '../db/repositories/EntryRepository';
 import { Typography } from '../constants/Typography';
@@ -129,8 +129,10 @@ export default function EditorScreen() {
         setAlertConfig({ visible: true, title, description, type, onClose });
     };
 
-    // Live count while editing, saved count while reading.
-    const wordCount = liveWordCount ?? countWords(content);
+    // Live count while editing, saved count while reading. The saved count is
+    // memoised so long notes are not re-split on every unrelated re-render.
+    const savedWordCount = useMemo(() => countWords(content), [content]);
+    const wordCount = liveWordCount ?? savedWordCount;
 
     // Leaving edit mode keeps the note open and shows the reader. Only a brand
     // new entry (which has no reader state) pops the screen.
@@ -226,27 +228,43 @@ export default function EditorScreen() {
         }
 
         if (type === 'description') {
-            const p = await PersonRepository.getById(Number(id));
-            if (p) {
-                const desc = p.description || '';
-                setContent(desc);
-                setOriginalContent(desc);
-                setTitle(p.name);
-                setOriginalTitle(p.name);
-                setLastUpdated(p.updatedAt);
-                setEditorHtml(markdownToHtml(desc));
-                isDataLoadedRef.current = true;
+            try {
+                const p = await PersonRepository.getById(Number(id));
+                if (p) {
+                    const desc = p.description || '';
+                    setContent(desc);
+                    setOriginalContent(desc);
+                    setTitle(p.name);
+                    setOriginalTitle(p.name);
+                    setLastUpdated(p.updatedAt);
+                    setEditorHtml(markdownToHtml(desc));
+                    isDataLoadedRef.current = true;
+                } else {
+                    // Without a loaded document the screen would sit on an empty
+                    // background forever, so leave rather than look stuck.
+                    showAlert('Error', 'This note could not be found.', 'error', () => router.back());
+                }
+            } catch (error) {
+                console.error('Failed to load person description:', error);
+                showAlert('Error', 'Could not open this note. Please try again.', 'error', () => router.back());
             }
         } else if (type === 'entry') {
-            const e = await EntryRepository.getById(Number(id));
-            if (e) {
-                setContent(e.content);
-                setOriginalContent(e.content);
-                setTitle(e.type);
-                setOriginalTitle(e.type);
-                setLastUpdated(e.createdAt);
-                setEditorHtml(markdownToHtml(e.content));
-                isDataLoadedRef.current = true;
+            try {
+                const e = await EntryRepository.getById(Number(id));
+                if (e) {
+                    setContent(e.content);
+                    setOriginalContent(e.content);
+                    setTitle(e.type);
+                    setOriginalTitle(e.type);
+                    setLastUpdated(e.createdAt);
+                    setEditorHtml(markdownToHtml(e.content));
+                    isDataLoadedRef.current = true;
+                } else {
+                    showAlert('Error', 'This note could not be found.', 'error', () => router.back());
+                }
+            } catch (error) {
+                console.error('Failed to load entry:', error);
+                showAlert('Error', 'Could not open this note. Please try again.', 'error', () => router.back());
             }
         }
     };
@@ -526,8 +544,8 @@ export default function EditorScreen() {
                         >
                             <RichEditor
                                 editor={editor}
-                                fontSize={settings.editorFontSize || 15}
-                                lineHeight={Math.round((settings.editorFontSize || 15) * 1.5)}
+                                fontSize={settings.editorFontSize || 16}
+                                lineHeight={Math.round((settings.editorFontSize || 16) * 1.5)}
                                 horizontalPadding={20}
                                 topPadding={32}
                                 placeholder="Start writing..."
@@ -561,8 +579,8 @@ export default function EditorScreen() {
                                         paddingHorizontal={20}
                                         onContentChange={handleReaderContentChange}
                                         style={{
-                                            fontSize: settings.editorFontSize || 15,
-                                            lineHeight: Math.round((settings.editorFontSize || 15) * 1.5)
+                                            fontSize: settings.editorFontSize || 16,
+                                            lineHeight: Math.round((settings.editorFontSize || 16) * 1.5)
                                         }}
                                     />
                                 </View>

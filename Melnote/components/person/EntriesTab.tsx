@@ -6,7 +6,6 @@ import { ScalePressable } from '../ui/ScalePressable';
 import { Swipeable } from 'react-native-gesture-handler';
 import { ThemedText } from '../ui/ThemedText';
 import { Card } from '../ui/Card';
-import { Colors } from '../../constants/Colors';
 import { DesignSystem } from '../../constants/DesignSystem';
 import { Typography } from '../../constants/Typography';
 import { Plus, FileText, MagnifyingGlass as Search, Sparkle as Sparkles, Coffee, House as Home, Briefcase, Airplane as Plane, Gift, Target, Tag, Trash, X } from '@/components/ui/Icon';
@@ -24,6 +23,36 @@ interface EntriesTabProps {
     acrylic: AcrylicPalette;
 }
 
+/** Splits a note body into a title line and a one-line summary. */
+function getNoteTitleAndBody(rawContent: string) {
+    if (!rawContent) return { title: 'Untitled note', body: '' };
+
+    const lines = rawContent
+        .split('\n')
+        // Blank-line spacers are stored as the literal entity "&nbsp;".
+        // They are layout, not content — a note made only of them is
+        // empty, and showing the raw entity as the note title is noise.
+        .map(l => l.replace(/&nbsp;|&#160;|\u00a0/g, ' ').trim())
+        .filter(l => l.length > 0 && !/^(-{3,}|\*{3,}|_{3,})$/.test(l));
+
+    if (lines.length === 0) return { title: 'Untitled note', body: '' };
+
+    const cleanLine = (line: string) =>
+        line
+            .replace(/^#{1,6}\s+/, '')
+            .replace(/\*\*(.+?)\*\*/g, '$1')
+            .replace(/\*(.+?)\*/g, '$1')
+            .replace(/~~(.+?)~~/g, '$1')
+            .replace(/^[-*]\s+/, '')
+            .replace(/^\[[ xX]\]\s+/, '')
+            .trim();
+
+    const title = cleanLine(lines[0]);
+    const body = lines.slice(1).map(cleanLine).filter(Boolean).join(' ');
+
+    return { title, body };
+}
+
 export function EntriesTab({ entries, onAdd, onDelete, theme, isAcrylic, acrylic }: EntriesTabProps) {
     const router = useRouter();
     const { colors } = useAppTheme();
@@ -31,10 +60,10 @@ export function EntriesTab({ entries, onAdd, onDelete, theme, isAcrylic, acrylic
     const [search, setSearch] = useState('');
 
     const filteredEntries = useMemo(() => {
-        return entries.filter(e => {
-            const q = search.toLowerCase().trim();
-            if (!q) return true;
+        const q = search.toLowerCase().trim();
+        if (!q) return entries;
 
+        return entries.filter(e => {
             const contentMatch = (e.content && e.content.toLowerCase().includes(q)) || (e.type && e.type.toLowerCase().includes(q));
 
             // Comprehensive Date Match
@@ -59,6 +88,25 @@ export function EntriesTab({ entries, onAdd, onDelete, theme, isAcrylic, acrylic
         });
     }, [entries, search]);
 
+    // Parsing a note body and formatting its date is not free, and both were
+    // being redone for every row on every render (including every keystroke
+    // in the search box). The results are cached per entry.
+    const entryMeta = useMemo(() => {
+        const map = new Map<number, { title: string; body: string; dateLabel: string }>();
+        entries.forEach(entry => {
+            const parsed = getNoteTitleAndBody(entry.content || '');
+            const created = entry.createdAt ? new Date(entry.createdAt) : null;
+            map.set(entry.id, {
+                title: parsed.title,
+                body: parsed.body,
+                dateLabel: created && !isNaN(created.getTime())
+                    ? created.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                    : '',
+            });
+        });
+        return map;
+    }, [entries]);
+
     const getCategoryIcon = (type: string) => {
         const size = 15;
         const color = colors.tint;
@@ -73,35 +121,6 @@ export function EntriesTab({ entries, onAdd, onDelete, theme, isAcrylic, acrylic
             case 'Note': return <FileText size={size} color={color} weight="fill" />;
             default: return <Tag size={size} color={color} weight="fill" />;
         }
-    };
-
-    const getNoteTitleAndBody = (rawContent: string) => {
-        if (!rawContent) return { title: 'Untitled note', body: '' };
-
-        const lines = rawContent
-            .split('\n')
-            // Blank-line spacers are stored as the literal entity "&nbsp;".
-            // They are layout, not content — a note made only of them is
-            // empty, and showing the raw entity as the note title is noise.
-            .map(l => l.replace(/&nbsp;|&#160;|\u00a0/g, ' ').trim())
-            .filter(l => l.length > 0 && !/^(-{3,}|\*{3,}|_{3,})$/.test(l));
-
-        if (lines.length === 0) return { title: 'Untitled note', body: '' };
-
-        const cleanLine = (line: string) =>
-            line
-                .replace(/^#{1,6}\s+/, '')
-                .replace(/\*\*(.+?)\*\*/g, '$1')
-                .replace(/\*(.+?)\*/g, '$1')
-                .replace(/~~(.+?)~~/g, '$1')
-                .replace(/^[-*]\s+/, '')
-                .replace(/^\[[ xX]\]\s+/, '')
-                .trim();
-
-        const title = cleanLine(lines[0]);
-        const body = lines.slice(1).map(cleanLine).filter(Boolean).join(' ');
-
-        return { title, body };
     };
 
     const renderRightActions = (id: number, dragX: RNAnimated.AnimatedInterpolation<number>) => {
@@ -185,7 +204,9 @@ export function EntriesTab({ entries, onAdd, onDelete, theme, isAcrylic, acrylic
                 </Animated.View>
             ) : (
                 filteredEntries.map((entry, index) => {
-                    const { title, body } = getNoteTitleAndBody(entry.content || '');
+                    const meta = entryMeta.get(entry.id);
+                    const title = meta?.title ?? 'Untitled note';
+                    const body = meta?.body ?? '';
                     return (
                         <Animated.View
                             key={entry.id}
@@ -217,7 +238,7 @@ export function EntriesTab({ entries, onAdd, onDelete, theme, isAcrylic, acrylic
                                                 </ThemedText>
                                                 <ThemedText style={[styles.entryMetaDot, { color: colors.secondary }]}>·</ThemedText>
                                                 <ThemedText style={[styles.entryMetaDate, { color: colors.secondary }]}>
-                                                    {new Date(entry.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                                    {meta?.dateLabel || ''}
                                                 </ThemedText>
                                             </View>
 

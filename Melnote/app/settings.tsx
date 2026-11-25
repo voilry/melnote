@@ -1,13 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, Alert, Platform, Share, Linking, Pressable } from 'react-native';
+import React, { useState, useRef } from 'react';
+import { View, StyleSheet, ScrollView, Platform, Linking } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { ThemedView } from '../components/ui/ThemedView';
 import { ThemedText } from '../components/ui/ThemedText';
 import { useSettings, ThemeMode } from '../store/SettingsContext';
-import { Colors } from '../constants/Colors';
 import { DesignSystem } from '../constants/DesignSystem';
 import { Typography } from '../constants/Typography';
-import { CaretLeft, CaretRight, Moon, Sun, Desktop as Monitor, Waveform, Trash, Database, Info, Bug, ShieldCheck, Heart, ShareNetwork as Share2, ArrowsInLineHorizontal, Sliders, ArrowSquareOut as ExternalLink, DownloadSimple as Download, Bell, ListMagnifyingGlass as ListFilter, Layout, TextT, SelectionBackground, MagicWand, Cards, Compass, PaintBrush, Book, FileText, LockKey, Calendar, CircleHalf, Mosaic, Palette } from '@/components/ui/Icon';
+import { CaretRight, Moon, Sun, Desktop as Monitor, Waveform, Trash, Bug, ShieldCheck, Heart, ShareNetwork as Share2, ArrowSquareOut as ExternalLink, DownloadSimple as Download, Bell, ListMagnifyingGlass as ListFilter, PaintBrush, Book, FileText, LockKey, Calendar, CircleHalf, Mosaic } from '@/components/ui/Icon';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import * as Haptics from 'expo-haptics';
@@ -21,11 +20,8 @@ import {
     type BackupSession,
     type BackupSummary,
 } from '../utils/backup';
-import { EntryRepository } from '../db/repositories/EntryRepository';
-import { PersonRepository } from '../db/repositories/PersonRepository';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '../hooks/useAppTheme';
-import Animated, { useSharedValue, useAnimatedStyle, withSpring, interpolateColor, withTiming } from 'react-native-reanimated';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
@@ -248,13 +244,25 @@ export default function SettingsScreen() {
     };
 
     const confirmClearData = async () => {
-        await DataRepository.clearAllData();
         triggerHaptic(Haptics.ImpactFeedbackStyle.Medium);
-        setShowClearData(false);
-        showAlert("Registry Wiped", "Your network has been cleared.", "success", () => {
-            router.dismissAll();
-            setTimeout(() => refreshApp(), 350);
-        });
+        try {
+            await DataRepository.clearAllData();
+            setShowClearData(false);
+            showAlert("Registry Wiped", "Your network has been cleared.", "success", () => {
+                router.dismissAll();
+                setTimeout(() => refreshApp(), 350);
+            });
+        } catch (error: any) {
+            // Without this the sheet would stay open with no feedback and the
+            // user would reasonably assume the wipe happened.
+            console.error('Failed to clear data:', error);
+            setShowClearData(false);
+            showAlert(
+                "Could Not Clear Data",
+                error?.message || "Something went wrong while clearing your data. Nothing was removed.",
+                "error"
+            );
+        }
     };
 
     const openLink = (url: string) => {
@@ -658,63 +666,12 @@ export default function SettingsScreen() {
     );
 }
 
-function SegmentedSelection({ options, selectedValue, onValueChange, colors, theme }: any) {
-    const selectedIndex = options.findIndex((o: any) => o.value === selectedValue);
-
-    return (
-        <View style={[styles.segmentedContainer, { backgroundColor: colors.surface, marginLeft: 32 }]}>
-            {options.map((opt: any, index: number) => {
-                const isSelected = index === selectedIndex;
-                return (
-                    <TouchableOpacity
-                        key={opt.label}
-                        onPress={() => onValueChange(opt.value)}
-                        style={[
-                            styles.segmentedOption,
-                            isSelected && {
-                                backgroundColor: theme === 'dark' ? colors.tint + '40' : colors.tint,
-                                borderColor: 'transparent',
-                                borderWidth: 0
-                            }
-                        ]}
-                    >
-                        <ThemedText style={[
-                            styles.segmentedText,
-                            {
-                                color: isSelected
-                                    ? (theme === 'dark' ? colors.tint : '#fff')
-                                    : colors.secondary
-                            }
-                        ]}>
-                            {opt.label}
-                        </ThemedText>
-                    </TouchableOpacity>
-                );
-            })}
-        </View>
-    );
-}
-
 function Section({ title, children }: { title: string, children: React.ReactNode }) {
     return (
         <View style={styles.section}>
             <ThemedText type="sectionHeader" style={styles.sectionTitle}>{title}</ThemedText>
             {children}
         </View>
-    );
-}
-
-function ThemeOption({ label, selected, onPress, icon, colors }: any) {
-    return (
-        <TouchableOpacity style={styles.optionRow} onPress={onPress} activeOpacity={0.7}>
-            <View style={styles.optionLabelGroup}>
-                {icon}
-                <ThemedText style={[styles.optionLabel, { marginLeft: 12 }]}>{label}</ThemedText>
-            </View>
-            <View style={[styles.radio, { borderColor: selected ? colors.tint : colors.border }]}>
-                {selected && <View style={[styles.radioInner, { backgroundColor: colors.tint }]} />}
-            </View>
-        </TouchableOpacity>
     );
 }
 
@@ -768,6 +725,8 @@ function MenuOption({ label, description, icon, onPress, colors, isDestructive, 
             innerStyle={{ borderRadius: borderRadius || DesignSystem.radius.sm }}
             scale={scale}
             scaleTo={0.96}
+            accessibilityRole="button"
+            accessibilityLabel={description ? `${label}. ${description}` : label}
         >
             {content}
         </ScalePressable>
@@ -858,15 +817,6 @@ const styles = StyleSheet.create({
         fontFamily: Typography.fontFamily.semibold,
     },
     separator: { height: 1, marginHorizontal: 16, opacity: 0.2 },
-    radio: {
-        width: 22,
-        height: 22,
-        borderRadius: 11,
-        borderWidth: 2,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    radioInner: { width: 10, height: 10, borderRadius: 5 },
     settingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
     settingInfo: { flex: 1, marginRight: 16 },
     settingTitleGroup: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
@@ -890,29 +840,8 @@ const styles = StyleSheet.create({
         borderRadius: 10,
         borderWidth: 0,
     },
-    segmentedContainer: {
-        flexDirection: 'row',
-        borderRadius: 10,
-        padding: 4,
-        marginTop: 12,
-        overflow: 'hidden',
-    },
-    segmentedOption: {
-        flex: 1,
-        paddingVertical: 8,
-        alignItems: 'center',
-        borderRadius: 7,
-    },
-    segmentedText: {
-        fontSize: 13,
-        fontFamily: Typography.fontFamily.semibold,
-    },
     menuIconContainer: { width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
     infoRow: { flexDirection: 'row', alignItems: 'center', padding: 20 },
-    versionText: {
-        fontFamily: Typography.fontFamily.semibold,
-        fontSize: 13
-    },
     themeCardsGrid: {
         flexDirection: 'row',
         justifyContent: 'space-between',

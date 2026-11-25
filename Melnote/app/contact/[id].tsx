@@ -256,7 +256,7 @@ export default function ContactEditorScreen() {
                 });
             }
             showToast(isNew ? 'Contact added' : 'Contact updated');
-            if (hapticsEnabled && Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            if (hapticsEnabled && Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
             if (router.canGoBack()) router.back(); else router.replace('/');
         } catch (error) {
             setAlertConfig({
@@ -275,10 +275,9 @@ export default function ContactEditorScreen() {
         try {
             await ContactRepository.deleteContact(Number(id));
             setShowDeleteModal(false);
-            if (hapticsEnabled && Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            if (hapticsEnabled && Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
             if (router.canGoBack()) router.back(); else router.replace('/');
         } catch (err) {
-            setIsSaving(false);
             setShowDeleteModal(false);
             setAlertConfig({
                 visible: true,
@@ -286,11 +285,13 @@ export default function ContactEditorScreen() {
                 description: 'Could not delete contact.',
                 type: 'error'
             });
+        } finally {
+            setIsSaving(false);
         }
     };
 
     const goBack = () => {
-        if (hapticsEnabled && Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        if (hapticsEnabled && Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
         router.back();
     };
 
@@ -384,7 +385,7 @@ export default function ContactEditorScreen() {
                                                 innerStyle={{ borderRadius: 16 }}
                                                 overlayColor={isSelected ? 'rgba(0,0,0,0.15)' : undefined}
                                                 onPress={() => {
-                                                    if (hapticsEnabled && Platform.OS !== 'web') Haptics.selectionAsync();
+                                                    if (hapticsEnabled && Platform.OS !== 'web') Haptics.selectionAsync().catch(() => {});
                                                     setSelectedPlatform(platform);
                                                     if (fieldError) setFieldError(null);
                                                 }}
@@ -444,7 +445,7 @@ export default function ContactEditorScreen() {
                                 style={styles.deleteButton}
                                 innerStyle={{ borderRadius: 12 }}
                                 onPress={() => {
-                                    if (hapticsEnabled && Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                                    if (hapticsEnabled && Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
                                     setShowDeleteModal(true);
                                 }}
                             >
@@ -518,11 +519,6 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginTop: 24,
         marginBottom: 16,
-    },
-    sectionLabel: {
-        fontSize: 13,
-        fontWeight: '800',
-        letterSpacing: 0.5,
     },
     activePlatformRow: {
         flexDirection: 'row',

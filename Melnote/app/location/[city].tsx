@@ -27,8 +27,10 @@ import { QuickScrollButton } from '../../components/ui/QuickScrollButton';
 export default function CityDetailScreen() {
     const { city } = useLocalSearchParams<{ city: string }>();
     const router = useRouter();
-    const { colors, theme, hapticsEnabled } = useAppTheme();
+    const { colors, hapticsEnabled } = useAppTheme();
     const insets = useSafeAreaInsets();
+    // expo-router hands back an array when a param appears more than once.
+    const cityName = Array.isArray(city) ? city[0] : city;
 
     const [people, setPeople] = useState<Person[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -38,6 +40,7 @@ export default function CityDetailScreen() {
     const scrollY = useSharedValue(0);
     const scrollDirection = useSharedValue<'up' | 'down'>('up');
     const isScrolling = useSharedValue(false);
+    const lastScrollNotify = useSharedValue(0);
     const hideTimeout = useRef<any>(null);
     const listRef = useRef<FlatList>(null);
 
@@ -48,18 +51,29 @@ export default function CityDetailScreen() {
         }, 800);
     }, []);
 
+    // Stop the pending hide timer when the screen goes away.
+    useEffect(() => () => {
+        if (hideTimeout.current) clearTimeout(hideTimeout.current);
+    }, []);
+
     const scrollHandler = useAnimatedScrollHandler({
         onScroll: (event) => {
             const currentY = event.contentOffset.y;
             const diff = currentY - scrollY.value;
-            
+
             if (Math.abs(diff) > 5) {
                 scrollDirection.value = diff > 0 ? 'down' : 'up';
                 isScrolling.value = currentY > 300;
             }
             scrollY.value = currentY;
-            
-            runOnJS(startHideTimer)();
+
+            // The hide timer only needs ~800ms accuracy; crossing to JS every
+            // frame is wasted bridge traffic, so throttle to ~150ms.
+            const now = Date.now();
+            if (now - lastScrollNotify.value > 150) {
+                lastScrollNotify.value = now;
+                runOnJS(startHideTimer)();
+            }
         },
     });
 
@@ -71,77 +85,86 @@ export default function CityDetailScreen() {
         }
     };
 
-    useEffect(() => { loadPeople(); }, [city]);
+    useEffect(() => { loadPeople(); }, [cityName]);
 
     const loadPeople = async () => {
         setIsLoading(true);
-        const all = await PersonRepository.getAll();
-        const cityFilter = city?.trim().toLowerCase();
-        // Normalize and filter by city
-        const cityPeople = all.filter(p => p.city?.trim().toLowerCase() === cityFilter);
-        // Sort by pinned first, then name
-        cityPeople.sort((a, b) => {
-            if (a.isPinned && !b.isPinned) return -1;
-            if (!a.isPinned && b.isPinned) return 1;
-            return a.name.localeCompare(b.name);
-        });
-        setPeople(cityPeople);
-        setIsLoading(false);
+        try {
+            const all = await PersonRepository.getAll();
+            const cityFilter = cityName?.trim().toLowerCase();
+            // Normalize and filter by city
+            const cityPeople = all.filter(p => p.city?.trim().toLowerCase() === cityFilter);
+            // Sort by pinned first, then name
+            cityPeople.sort((a, b) => {
+                if (a.isPinned && !b.isPinned) return -1;
+                if (!a.isPinned && b.isPinned) return 1;
+                return a.name.localeCompare(b.name);
+            });
+            setPeople(cityPeople);
+        } catch (error) {
+            // Without this the screen would sit on the empty state forever.
+            console.error('Failed to load city members:', error);
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const filteredPeople = useMemo(() => {
+        const q = search.trim().toLowerCase();
+        if (!q) return people;
         return people.filter(p =>
-            p.name.toLowerCase().includes(search.toLowerCase()) ||
-            (p.elevatorPitch && p.elevatorPitch.toLowerCase().includes(search.toLowerCase()))
+            p.name.toLowerCase().includes(q) ||
+            (p.elevatorPitch ? p.elevatorPitch.toLowerCase().includes(q) : false)
         );
     }, [people, search]);
 
-    const renderItem = ({ item: person, index }: { item: Person, index: number }) => (
+    const renderItem = useCallback(({ item: person, index }: { item: Person, index: number }) => (
         <Animated.View
-            key={`city-person-${person.id}`}
             layout={Layout.springify()}
         >
             <Animated.View
                 entering={FadeInDown.delay(Math.min(index, 6) * 50).duration(500)}
             >
                 <ScalePressable
-                onPress={() => {
-                    if (hapticsEnabled && Platform.OS !== 'web') Haptics.selectionAsync();
-                    router.push(`/person/${person.id}`);
-                }}
-                style={styles.pressable}
-                innerStyle={{ borderRadius: DesignSystem.radius.lg }}
-            >
-                <Card style={styles.personCard}>
-                    <View style={styles.cardMain}>
-                        <Avatar name={person.name} uri={person.avatarUri} size={54} />
+                    onPress={() => {
+                        if (hapticsEnabled && Platform.OS !== 'web') Haptics.selectionAsync().catch(() => {});
+                        router.push(`/person/${person.id}`);
+                    }}
+                    style={styles.pressable}
+                    innerStyle={{ borderRadius: DesignSystem.radius.lg }}
+                    accessibilityRole="button"
+                    accessibilityLabel={person.name}
+                >
+                    <Card style={styles.personCard}>
+                        <View style={styles.cardMain}>
+                            <Avatar name={person.name} uri={person.avatarUri} size={54} />
 
-                        <View style={styles.personInfo}>
-                            <View style={styles.nameRow}>
-                                <ThemedText style={styles.personName}>
-                                    {person.name}
+                            <View style={styles.personInfo}>
+                                <View style={styles.nameRow}>
+                                    <ThemedText style={styles.personName}>
+                                        {person.name}
+                                    </ThemedText>
+                                    {person.isPinned && (
+                                        <PushPin size={14} color={colors.tint} weight="fill" style={{ marginLeft: 6 }} />
+                                    )}
+                                </View>
+
+                                <ThemedText
+                                    type="small"
+                                    numberOfLines={1}
+                                    style={{ color: colors.secondary, opacity: 0.8 }}
+                                >
+                                    {person.elevatorPitch || 'No description added'}
                                 </ThemedText>
-                                {person.isPinned && (
-                                    <PushPin size={14} color={colors.tint} weight="fill" style={{ marginLeft: 6 }} />
-                                )}
                             </View>
 
-                            <ThemedText
-                                type="small"
-                                numberOfLines={1}
-                                style={{ color: colors.secondary, opacity: 0.8 }}
-                            >
-                                {person.elevatorPitch || 'No description added'}
-                            </ThemedText>
+                            <CaretRight size={18} color={colors.icon} style={{ opacity: 0.3 }} />
                         </View>
-
-                        <CaretRight size={18} color={colors.icon} style={{ opacity: 0.3 }} />
-                    </View>
-                </Card>
-            </ScalePressable>
+                    </Card>
+                </ScalePressable>
+            </Animated.View>
         </Animated.View>
-    </Animated.View>
-    );
+    ), [colors.tint, hapticsEnabled, router]);
 
     return (
         <ThemedView style={styles.container}>
@@ -151,7 +174,7 @@ export default function CityDetailScreen() {
             <ScreenHeader
                 onBack={() => router.back()}
                 style={styles.header}
-                title={city}
+                title={cityName}
                 alignCenter={false}
             />
 
@@ -184,7 +207,7 @@ export default function CityDetailScreen() {
                             </ThemedText>
                             <ThemedText style={[styles.emptySubtitle, { color: colors.secondary }]}>
                                 {search
-                                    ? `Could not find anyone matching "${search}" in ${city}.`
+                                    ? `Could not find anyone matching "${search}" in ${cityName}.`
                                     : `Nobody is listed under this city yet. You can add a city to a person's profile to see them here.`}
                             </ThemedText>
                         </Animated.View>
@@ -206,19 +229,6 @@ const styles = StyleSheet.create({
 
     listHeader: {
         marginBottom: 8,
-    },
-    memberCountRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginTop: 1,
-        paddingHorizontal: 14,
-        gap: 6,
-        marginBottom: 1,
-    },
-    memberCountText: {
-        fontSize: 14,
-        fontFamily: Typography.fontFamily.bold,
-        opacity: 0.9,
     },
     searchBar: {
         height: 58,
@@ -267,14 +277,6 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingTop: 60,
         paddingHorizontal: 40,
-    },
-    emptyCircle: {
-        width: 88,
-        height: 88,
-        borderRadius: 44,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 12,
     },
     emptySubtitle: {
         fontSize: 14,

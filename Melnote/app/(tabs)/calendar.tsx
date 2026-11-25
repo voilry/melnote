@@ -1,4 +1,4 @@
-import { View, StyleSheet, TouchableOpacity, ScrollView, Platform, Dimensions, Alert, DeviceEventEmitter } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, ScrollView, Platform, DeviceEventEmitter } from 'react-native';
 import { ThemedView } from '../../components/ui/ThemedView';
 import { ThemedText } from '../../components/ui/ThemedText';
 import { Card } from '../../components/ui/Card';
@@ -26,10 +26,10 @@ import { ScalePressable } from '../../components/ui/ScalePressable';
 import { Typography } from '../../constants/Typography';
 import { QuickScrollButton } from '../../components/ui/QuickScrollButton';
 import { AlertModal } from '../../components/ui/AlertModal';
+import { showToast } from '../../components/ui/Toast';
 import { useRef } from 'react';
 import { markdownPreviewText } from '../../utils/markdownConverter';
 
-const { width } = Dimensions.get('window');
 const DAY_SIZE = 42; // Fixed smaller size for clean proportion
 
 type Event = {
@@ -53,6 +53,7 @@ export default function CalendarScreen() {
     const scrollY = useSharedValue(0);
     const scrollDirection = useSharedValue<'up' | 'down'>('up');
     const isScrolling = useSharedValue(false);
+    const lastScrollNotify = useSharedValue(0);
     const hideTimeout = useRef<any>(null);
     const scrollRef = useRef<any>(null);
     const startHideTimer = useCallback(() => {
@@ -60,6 +61,10 @@ export default function CalendarScreen() {
         hideTimeout.current = setTimeout(() => {
             isScrolling.value = false;
         }, 800);
+    }, []);
+
+    useEffect(() => () => {
+        if (hideTimeout.current) clearTimeout(hideTimeout.current);
     }, []);
 
     const scrollHandler = useAnimatedScrollHandler({
@@ -72,8 +77,14 @@ export default function CalendarScreen() {
                 isScrolling.value = currentY > 400;
             }
             scrollY.value = currentY;
-            
-            runOnJS(startHideTimer)();
+
+            // The hide timer only needs ~800ms accuracy; crossing to JS every
+            // frame is wasted bridge traffic, so throttle to ~150ms.
+            const now = Date.now();
+            if (now - lastScrollNotify.value > 150) {
+                lastScrollNotify.value = now;
+                runOnJS(startHideTimer)();
+            }
         },
     });
 
@@ -113,19 +124,23 @@ export default function CalendarScreen() {
         return () => sub.remove();
     }, []);
 
-    const loadData = async () => {
-        const [ppl, jrnls, rmds] = await Promise.all([
-            PersonRepository.getAll(),
-            JournalRepository.getAll(),
-            ReminderRepository.getAll()
-        ]);
+    const loadData = useCallback(async () => {
+        try {
+            const [ppl, jrnls, rmds] = await Promise.all([
+                PersonRepository.getAll(),
+                JournalRepository.getAll(),
+                ReminderRepository.getAll()
+            ]);
 
-        const validJournals = (jrnls || []).filter(j => j && j.id && (j.content?.trim() || j.title?.trim()));
+            const validJournals = (jrnls || []).filter(j => j && j.id && (j.content?.trim() || j.title?.trim()));
 
-        setPeople(ppl);
-        setJournals(validJournals);
-        setReminders(rmds || []);
-    };
+            setPeople(ppl);
+            setJournals(validJournals);
+            setReminders(rmds || []);
+        } catch (error) {
+            console.error('Failed to load calendar data:', error);
+        }
+    }, []);
 
     const handleReminderSuccess = () => {
         const { showToast } = require('../../components/ui/Toast');
@@ -181,13 +196,28 @@ export default function CalendarScreen() {
         return clean;
     };
 
+    // Birthdays recur every year, so they cannot live in the full-date
+    // eventMap. A month-day set keeps the per-cell marker lookup O(1)
+    // instead of scanning every person for each of the 42 day cells.
+    const birthdayMonthDays = useMemo(() => {
+        const set = new Set<string>();
+        people.forEach(p => {
+            if (!p.birthdate) return;
+            const parts = p.birthdate.split('-');
+            if (parts.length >= 3) {
+                set.add(`${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`);
+            }
+        });
+        return set;
+    }, [people]);
+
     const eventMap = useMemo(() => {
-        const map: Record<string, { birthday: boolean; met: boolean; journal: boolean; reminder: boolean; reminderColor?: string | null }> = {};
+        const map: Record<string, { met: boolean; journal: boolean; reminder: boolean; reminderColor?: string | null }> = {};
 
         people.forEach(p => {
             if (p.firstMet) {
                 const norm = normalizeDateStr(p.firstMet);
-                if (!map[norm]) map[norm] = { birthday: false, met: false, journal: false, reminder: false };
+                if (!map[norm]) map[norm] = { met: false, journal: false, reminder: false };
                 map[norm].met = true;
             }
         });
@@ -195,7 +225,7 @@ export default function CalendarScreen() {
         journals.forEach(j => {
             if (j.date && (j.content?.trim() || j.title?.trim())) {
                 const norm = normalizeDateStr(j.date);
-                if (!map[norm]) map[norm] = { birthday: false, met: false, journal: false, reminder: false };
+                if (!map[norm]) map[norm] = { met: false, journal: false, reminder: false };
                 map[norm].journal = true;
             }
         });
@@ -203,7 +233,7 @@ export default function CalendarScreen() {
         reminders.forEach(r => {
             if (r.date && !r.completed) {
                 const norm = normalizeDateStr(r.date);
-                if (!map[norm]) map[norm] = { birthday: false, met: false, journal: false, reminder: false };
+                if (!map[norm]) map[norm] = { met: false, journal: false, reminder: false };
                 map[norm].reminder = true;
                 if (!map[norm].reminderColor && r.color) {
                     map[norm].reminderColor = r.color;
@@ -273,8 +303,9 @@ export default function CalendarScreen() {
         const isCurrentLeap = isLeapYear(y);
         const isFeb28NonLeap = !isCurrentLeap && m === '02' && d === '28';
 
-        const base = eventMap[dateStr] || { birthday: false, met: false, journal: false, reminder: false, reminderColor: undefined };
-        const birthday = people.some(p => p.birthdate && (p.birthdate.endsWith(monthDay) || (isFeb28NonLeap && p.birthdate.endsWith('-02-29'))));
+        const base = eventMap[dateStr] || { met: false, journal: false, reminder: false, reminderColor: undefined };
+        const birthday = birthdayMonthDays.has(monthDay) ||
+            (isFeb28NonLeap && birthdayMonthDays.has('02-29'));
 
         return {
             ...base,
@@ -317,8 +348,12 @@ export default function CalendarScreen() {
                 setShowPastDateAlert(true);
                 return;
             }
+            // Close the day sheet first: stacking two native modals causes
+            // focus/back-button glitches on Android.
+            setShowDetailModal(false);
             setShowAddReminder(true);
         } else if (selStr > todayStr) {
+            setShowDetailModal(false);
             setShowAddReminder(true);
         } else {
             const hasJournal = eventMap[selStr]?.journal || journals.some(j => j.date === selStr && (j.content?.trim() || j.title?.trim()));
@@ -342,20 +377,28 @@ export default function CalendarScreen() {
     };
 
     const confirmDeleteEvent = async () => {
-        if (eventToDelete) {
-            if (hapticsEnabled && Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            try {
-                if (eventToDelete.type === 'journal') {
-                    await JournalRepository.delete(eventToDelete.id);
-                } else if (eventToDelete.type === 'reminder') {
-                    await ReminderRepository.delete(eventToDelete.id);
-                }
-                loadData();
-            } catch (error) {
-                console.error('Failed to delete event:', error);
-            }
-            setEventToDelete(null);
+        if (!eventToDelete) return;
+        const { id, type } = eventToDelete;
+        if (hapticsEnabled && Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        // Optimistic removal so the row disappears immediately; a failed
+        // delete reloads to restore reality.
+        if (type === 'journal') {
+            setJournals(prev => prev.filter(j => j.id !== id));
+        } else if (type === 'reminder') {
+            setReminders(prev => prev.filter(r => r.id !== id));
         }
+        try {
+            if (type === 'journal') {
+                await JournalRepository.delete(id);
+            } else if (type === 'reminder') {
+                await ReminderRepository.delete(id);
+            }
+        } catch (error) {
+            console.error('Failed to delete event:', error);
+            showToast('Could not delete event');
+            loadData();
+        }
+        setEventToDelete(null);
     };
 
     const handleToggleReminder = async (reminder: any) => {
@@ -366,6 +409,7 @@ export default function CalendarScreen() {
             loadData();
         } catch (error) {
             console.error('Failed to toggle reminder:', error);
+            showToast('Could not update reminder');
         }
     };
 
@@ -428,8 +472,11 @@ export default function CalendarScreen() {
 
         reminders.forEach(r => {
             if (r.date && !r.completed) {
-                const rDate = new Date(r.date + 'T00:00:00');
-                if (rDate >= today && rDate <= endOfMonth) {
+                // Normalise first: a stored time component would make
+                // `${r.date}T00:00:00` an invalid date and silently drop it.
+                const normDate = normalizeDateStr(r.date);
+                const rDate = normDate ? new Date(`${normDate}T00:00:00`) : new Date(NaN);
+                if (!isNaN(rDate.getTime()) && rDate >= today && rDate <= endOfMonth) {
                     events.push({
                         type: 'reminder',
                         date: rDate,
@@ -448,30 +495,34 @@ export default function CalendarScreen() {
 
 
     const renderDay = (item: { day: number | null, date: Date | null }, index: number) => {
+        if (!item.day || !item.date) {
+            return <View key={index} style={styles.dayCell} />;
+        }
+
         const markers = hasEvents(item.date);
         const selected = isSelected(item.date);
         const today = isToday(item.date);
-
-        if (!item.day) {
-            return <View key={index} style={styles.dayCell} />;
-        }
+        const hasAnyMarker = markers.birthday || markers.met || markers.journal || markers.reminder;
 
         return (
             <ScalePressable
                 key={index}
                 scaleTo={0.9}
                 onPress={() => {
-                    if (item.date) {
-                        if (hapticsEnabled && Platform.OS !== 'web') Haptics.selectionAsync();
-                        setSelectedDate(item.date);
-                        setShowDetailModal(true);
-                    }
+                    if (hapticsEnabled && Platform.OS !== 'web') Haptics.selectionAsync();
+                    setSelectedDate(item.date);
+                    setShowDetailModal(true);
                 }}
                 style={[
                     styles.dayCell,
                     selected && { backgroundColor: colors.tint + '15', borderRadius: 16 }
                 ]}
                 innerStyle={{ borderRadius: 16 }}
+                accessibilityRole="button"
+                accessibilityLabel={
+                    `${item.date.toLocaleDateString('default', { month: 'long', day: 'numeric' })}`
+                    + `${today ? ', today' : ''}${hasAnyMarker ? ', has events' : ''}`
+                }
             >
                 <View style={styles.dayContent}>
                     <ThemedText style={[
