@@ -114,7 +114,6 @@ function WheelPicker({ items, value, onChange, width }: { items: { label: string
             <View style={{ height: ITEM_HEIGHT, justifyContent: 'center', alignItems: 'center' }}>
                 <RNAnimated.Text style={{
                     fontSize: 19,
-                    fontWeight: '700',
                     fontFamily: Typography.fontFamily.bold,
                     color: colors.text,
                     opacity,

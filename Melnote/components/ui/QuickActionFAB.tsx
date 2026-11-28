@@ -155,7 +155,6 @@ const styles = StyleSheet.create({
     },
     labelText: {
         fontSize: 14,
-        fontWeight: '600',
         fontFamily: Typography.fontFamily.semibold,
     }
 });

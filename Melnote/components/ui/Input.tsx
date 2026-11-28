@@ -82,7 +82,6 @@ const styles = StyleSheet.create({
         paddingTop: 0,
         paddingBottom: 0,
         fontSize: 14,
-        fontWeight: '600',
         fontFamily: Typography.fontFamily.semibold,
         textAlignVertical: 'center',
     },

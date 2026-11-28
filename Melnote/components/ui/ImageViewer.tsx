@@ -392,7 +392,6 @@ const styles = StyleSheet.create({
     counterText: {
         color: 'rgba(255, 255, 255, 0.85)',
         fontSize: 12,
-        fontWeight: '600',
         fontFamily: Typography.fontFamily.semibold,
     },
     captionWrap: {

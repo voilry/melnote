@@ -118,7 +118,6 @@ const styles = StyleSheet.create({
     },
     chipText: {
         fontSize: 13,
-        fontWeight: '600',
         fontFamily: Typography.fontFamily.semibold,
     },
     hint: {
