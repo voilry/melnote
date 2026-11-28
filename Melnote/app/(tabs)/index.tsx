@@ -115,7 +115,7 @@ const MemoryLaneCard = memo(({ entry, colors, router }: any) => {
             <View style={styles.highlightHeader}>
                 <View style={[styles.highlightTitleRow, { marginBottom: 4 }]}>
                     <Book size={14} color={colors.tint} weight="bold" />
-                    <ThemedText type="tiny" style={{ color: colors.tint, fontWeight: '800', marginLeft: 6 }}>
+                    <ThemedText type="tiny" style={{ color: colors.tint, fontFamily: Typography.fontFamily.extrabold, marginLeft: 6 }}>
                         {dateLabel}
                     </ThemedText>
                 </View>
@@ -846,7 +846,7 @@ export default function PeopleScreen() {
                                         springConfig={DesignSystem.animation.springs.fast}
                                     >
                                         <CaretLeft size={20} color={colors.secondary} />
-                                        <ThemedText style={{ color: colors.secondary, marginLeft: 8, fontWeight: '600' }}>Back to Dashboard</ThemedText>
+                                        <ThemedText style={{ color: colors.secondary, marginLeft: 8, fontFamily: Typography.fontFamily.semibold }}>Back to Dashboard</ThemedText>
                                     </ScalePressable>
                                 )}
                                 <View style={styles.searchSection}>
@@ -926,7 +926,7 @@ export default function PeopleScreen() {
                                                                 <Avatar name={s.person.name} uri={s.person.avatarUri} size={44} />
                                                                 <View style={{ flex: 1 }}>
                                                                     <ThemedText type="defaultSemiBold" style={{ fontSize: 14 }}>{s.person.name}</ThemedText>
-                                                                    <ThemedText type="tiny" style={{ color: colors.tint, fontWeight: '600' }}>{s.reason}</ThemedText>
+                                                                    <ThemedText type="tiny" style={{ color: colors.tint, fontFamily: Typography.fontFamily.semibold }}>{s.reason}</ThemedText>
                                                                 </View>
                                                             </View>
                                                         </ScalePressable>
@@ -1172,7 +1172,7 @@ export default function PeopleScreen() {
                             }
                         ]}
                     >
-                        <ThemedText type="tiny" style={{ padding: 8, opacity: 0.5, fontWeight: '700' }}>Sort by</ThemedText>
+                        <ThemedText type="tiny" style={{ padding: 8, opacity: 0.5, fontFamily: Typography.fontFamily.bold }}>Sort by</ThemedText>
                         {[
                             { label: 'Name (A-Z)', value: 'name' },
                             { label: 'Newest First', value: 'newest' },
@@ -1188,7 +1188,7 @@ export default function PeopleScreen() {
                                     setShowSortMenu(false);
                                 }}
                             >
-                                <ThemedText style={{ fontWeight: sortBy === option.value ? '700' : '400', color: sortBy === option.value ? colors.tint : colors.text }}>
+                                <ThemedText style={{ fontFamily: sortBy === option.value ? Typography.fontFamily.bold : Typography.fontFamily.regular, color: sortBy === option.value ? colors.tint : colors.text }}>
                                     {option.label}
                                 </ThemedText>
                             </ScalePressable>
@@ -1281,7 +1281,7 @@ export default function PeopleScreen() {
                                     color={personToManage?.isPinned ? colors.secondary : (theme === 'dark' ? '#000' : '#fff')}
                                     weight={personToManage?.isPinned ? 'regular' : 'fill'}
                                 />
-                                <ThemedText style={{ fontSize: 16, fontWeight: '700', color: personToManage?.isPinned ? colors.text : (theme === 'dark' ? '#000' : '#fff') }}>
+                                <ThemedText style={{ fontSize: 16, fontFamily: Typography.fontFamily.bold, color: personToManage?.isPinned ? colors.text : (theme === 'dark' ? '#000' : '#fff') }}>
                                     {personToManage?.isPinned ? 'Unpin from Top' : 'Pin to Top'}
                                 </ThemedText>
                             </ScalePressable>

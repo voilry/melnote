@@ -428,10 +428,11 @@ export default function EditorScreen() {
             centerContent={
                 <View style={styles.headerInfo}>
                     {isEditing && type === 'entry' && !editingTitle ? (
-                        <TouchableOpacity onPress={() => {
-                            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-                            setEditingTitle(true);
-                        }} style={styles.titleEditRow}>
+                        <ScalePressable
+                            onPress={() => setEditingTitle(true)}
+                            style={styles.titleEditRow}
+                            scaleTo={0.95}
+                        >
                             <ThemedText
                                 type="defaultSemiBold"
                                 numberOfLines={1}
@@ -446,7 +447,7 @@ export default function EditorScreen() {
                                 {title || 'Untitled'}
                             </ThemedText>
                             <Edit3 size={12} color={colors.secondary} />
-                        </TouchableOpacity>
+                        </ScalePressable>
                     ) : isEditing && type === 'entry' && editingTitle ? (
                         <TextInput
                             value={title}

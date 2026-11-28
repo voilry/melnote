@@ -527,7 +527,7 @@ export default function CalendarScreen() {
                 <View style={styles.dayContent}>
                     <ThemedText style={[
                         styles.dayText,
-                        today && { color: colors.tint, fontWeight: '900' },
+                        today && { color: colors.tint, fontFamily: Typography.fontFamily.black },
                         selected && { color: colors.tint }
                     ]}>
                         {item.day}
@@ -751,8 +751,9 @@ export default function CalendarScreen() {
                                             key={idx}
                                             style={styles.eventItemContainer}
                                         >
-                                            <TouchableOpacity
+                                            <ScalePressable
                                                 style={{ flex: 1 }}
+                                                scaleTo={0.97}
                                                 onPress={() => {
                                                     if (event.type === 'journal') {
                                                         // Navigating away: drop the sheet at once so its
@@ -802,7 +803,7 @@ export default function CalendarScreen() {
                                                         <Avatar name={event.person.name} uri={event.person.avatarUri} size={32} />
                                                     )}
                                                 </Card>
-                                            </TouchableOpacity>
+                                            </ScalePressable>
 
                                             {event.type === 'reminder' && (
                                                 <View style={styles.eventActions}>

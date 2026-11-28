@@ -255,7 +255,7 @@ export function TimePicker({ value, onChange, label, placeholder = 'Select Time'
                                             scaleTo={0.93}
                                             overlayColor="transparent"
                                         >
-                                            <ThemedText style={{ color: colors.secondary, fontWeight: '600', fontSize: 16 }}>Cancel</ThemedText>
+                                            <ThemedText style={{ color: colors.secondary, fontFamily: Typography.fontFamily.semibold, fontSize: 16 }}>Cancel</ThemedText>
                                         </ScalePressable>
                                     </View>
                                     <View style={{ flex: 1, alignItems: 'center' }}>
@@ -268,14 +268,14 @@ export function TimePicker({ value, onChange, label, placeholder = 'Select Time'
                                             scaleTo={0.93}
                                             overlayColor="transparent"
                                         >
-                                            <ThemedText style={{ color: colors.tint, fontWeight: '600', fontSize: 16 }}>Done</ThemedText>
+                                            <ThemedText style={{ color: colors.tint, fontFamily: Typography.fontFamily.semibold, fontSize: 16 }}>Done</ThemedText>
                                         </ScalePressable>
                                     </View>
                                 </View>
 
                                 <View style={styles.pickerWrapper}>
                                     <WheelPicker items={hoursText} value={tempHour} onChange={setTempHour} width="25%" />
-                                    <ThemedText style={{ fontSize: 24, fontWeight: '800', marginHorizontal: 4 }}>:</ThemedText>
+                                    <ThemedText style={{ fontSize: 24, fontFamily: Typography.fontFamily.extrabold, marginHorizontal: 4 }}>:</ThemedText>
                                     <WheelPicker items={minutesText} value={tempMinute} onChange={setTempMinute} width="25%" />
                                     <View style={{ width: 16 }} />
                                     <WheelPicker items={ampmText} value={tempAmpm} onChange={setTempAmpm} width="30%" />
@@ -298,7 +298,7 @@ const styles = StyleSheet.create({
     },
     label: {
         fontSize: 12,
-        fontWeight: '800',
+        fontFamily: Typography.fontFamily.extrabold,
         marginBottom: 8,
         textTransform: 'uppercase',
         letterSpacing: 1,
@@ -314,7 +314,7 @@ const styles = StyleSheet.create({
     },
     valueText: {
         fontSize: 16,
-        fontWeight: '600',
+        fontFamily: Typography.fontFamily.semibold,
     },
     modalOverlay: {
         flex: 1,

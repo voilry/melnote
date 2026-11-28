@@ -335,7 +335,7 @@ export function DatePicker({ value, onChange, label, placeholder = 'Select Date'
                                                 scaleTo={0.93}
                                                 overlayColor="transparent"
                                             >
-                                                <ThemedText style={{ color: colors.secondary, fontWeight: '600', fontSize: 16 }}>Cancel</ThemedText>
+                                                <ThemedText style={{ color: colors.secondary, fontFamily: Typography.fontFamily.semibold, fontSize: 16 }}>Cancel</ThemedText>
                                             </ScalePressable>
                                         </View>
                                         <View style={{ flex: 1, alignItems: 'center' }}>
@@ -348,7 +348,7 @@ export function DatePicker({ value, onChange, label, placeholder = 'Select Date'
                                                 scaleTo={0.93}
                                                 overlayColor="transparent"
                                             >
-                                                <ThemedText style={{ color: colors.tint, fontWeight: '600', fontSize: 16 }}>Done</ThemedText>
+                                                <ThemedText style={{ color: colors.tint, fontFamily: Typography.fontFamily.semibold, fontSize: 16 }}>Done</ThemedText>
                                             </ScalePressable>
                                         </View>
                                     </View>
@@ -390,7 +390,7 @@ const styles = StyleSheet.create({
     },
     valueText: {
         fontSize: 16,
-        fontWeight: '600',
+        fontFamily: Typography.fontFamily.semibold,
     },
     modalOverlay: {
         flex: 1,

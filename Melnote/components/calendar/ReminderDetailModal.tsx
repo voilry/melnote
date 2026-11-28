@@ -185,12 +185,12 @@ export function ReminderDetailModal({ visible, reminder: reminderProp, onClose, 
                                     {reminder.completed ? (
                                         <>
                                             <CheckCircle size={22} color={theme === 'light' ? '#fff' : '#000'} weight="fill" />
-                                            <ThemedText style={{ color: theme === 'light' ? '#fff' : '#000', fontWeight: '700', marginLeft: 10 }}>Completed</ThemedText>
+                                            <ThemedText style={{ color: theme === 'light' ? '#fff' : '#000', fontFamily: Typography.fontFamily.bold, marginLeft: 10 }}>Completed</ThemedText>
                                         </>
                                     ) : (
                                         <>
                                             <CheckCircleDash size={22} color={theme === 'light' ? '#fff' : '#000'} weight="line" />
-                                            <ThemedText style={{ color: theme === 'light' ? '#fff' : '#000', fontWeight: '700', marginLeft: 10 }}>Mark as Done</ThemedText>
+                                            <ThemedText style={{ color: theme === 'light' ? '#fff' : '#000', fontFamily: Typography.fontFamily.bold, marginLeft: 10 }}>Mark as Done</ThemedText>
                                         </>
                                     )}
                                 </View>
