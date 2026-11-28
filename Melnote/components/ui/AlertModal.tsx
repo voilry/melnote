@@ -43,12 +43,12 @@ export function AlertModal({ visible, title, description, type = 'info', onClose
                     exiting={FadeOut.duration(220)}
                     style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.5)' }]}
                 />
-                <Pressable style={styles.modalBackdrop} onPress={onClose}>
+                <View style={styles.modalBackdrop}>
+                    <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
                     <Animated.View
                         entering={SlideInDown.duration(320).springify().damping(24).stiffness(240).mass(0.9)}
                         exiting={FadeOutDown.duration(260).easing(Easing.bezier(0.4, 0, 0.5, 1))}
                         style={[styles.modalContent, { backgroundColor: colors.card, paddingBottom: 100 + insets.bottom + 28 }]}
-                        onStartShouldSetResponder={() => true}
                     >
                         <View style={[styles.handle, { backgroundColor: colors.border }]} />
                         <View style={styles.iconContainer}>
@@ -65,7 +65,7 @@ export function AlertModal({ visible, title, description, type = 'info', onClose
                             <ThemedText style={[styles.buttonLabel, { color: colors.tintContrast }]}>{buttonLabel}</ThemedText>
                         </ScalePressable>
                     </Animated.View>
-                </Pressable>
+                </View>
             </View>
             )}
         </Modal>

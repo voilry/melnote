@@ -11,6 +11,7 @@ import { JournalRepository } from '../../db/repositories/JournalRepository';
 import { RelationshipRepository } from '../../db/repositories/RelationshipRepository';
 
 import { DesignSystem } from '../../constants/DesignSystem';
+import { Typography } from '../../constants/Typography';
 import { Trash, CaretLeft as ChevronLeft, DotsThree as MoreHorizontal, Info, ChatCenteredText as MessageSquare, BookOpen, Folder, PencilSimple as Edit, Star, Users, Briefcase, Heart, Lightning as Zap, Coffee, House as Home, Globe, Airplane as Plane, MusicNote as Music, Smiley as Smile, ContactsFour } from '@/components/ui/Icon';
 import { GroupRepository, Group } from '../../db/repositories/GroupRepository';
 import { useFocusEffect } from 'expo-router/react-navigation';
@@ -522,7 +523,7 @@ export default function PersonDetailScreen() {
                                             style={[styles.groupChip, { backgroundColor: groupAcrylicBg, borderColor: 'transparent', paddingVertical: 6, paddingHorizontal: 12 }]}
                                         >
                                             {getGroupIcon(g.icon, colors.tint, 14)}
-                                            <ThemedText style={{ fontSize: 13, color: colors.tint, fontWeight: '700', marginLeft: 6 }}>{g.name}</ThemedText>
+                                            <ThemedText style={{ fontSize: 13, color: colors.tint, fontFamily: Typography.fontFamily.bold, marginLeft: 6 }}>{g.name}</ThemedText>
                                         </View>
                                     </Animated.View>
                                 );
@@ -671,7 +672,7 @@ export default function PersonDetailScreen() {
                             innerStyle={{ borderRadius: 12 }}
                         >
                             <Trash size={18} color={colors.error} weight="fill" />
-                            <ThemedText style={[styles.menuText, { color: colors.error, fontWeight: '700' }]}>Delete Profile</ThemedText>
+                            <ThemedText style={[styles.menuText, { color: colors.error, fontFamily: Typography.fontFamily.bold }]}>Delete Profile</ThemedText>
                         </ScalePressable>
                     </Animated.View>
                 </Pressable>
@@ -859,7 +860,7 @@ const styles = StyleSheet.create({
     },
     topBarTitle: {
         fontSize: 17,
-        fontWeight: '700',
+        fontFamily: Typography.fontFamily.bold,
         textAlign: 'center',
         marginHorizontal: 10,
         includeFontPadding: false,
@@ -922,7 +923,7 @@ const styles = StyleSheet.create({
     },
     menuText: {
         marginLeft: 12,
-        fontWeight: '600',
+        fontFamily: Typography.fontFamily.semibold,
     },
     groupChip: {
         flexDirection: 'row',

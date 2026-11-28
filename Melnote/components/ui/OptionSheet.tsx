@@ -63,7 +63,8 @@ export function OptionSheet({
                     style={[StyleSheet.absoluteFill, styles.dim]}
                     pointerEvents="none"
                 />
-                <Pressable style={styles.backdrop} onPress={onClose}>
+                <View style={styles.backdrop}>
+                    <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
                     <Animated.View
                         entering={SHEET_ENTER}
                         exiting={FadeOutDown.duration(260).easing(Easing.bezier(0.4, 0, 0.5, 1))}
@@ -75,7 +76,6 @@ export function OptionSheet({
                                 marginBottom: -100,
                             },
                         ]}
-                        onStartShouldSetResponder={() => true}
                     >
                         <View style={[styles.handle, { backgroundColor: colors.border }]} />
                         <ThemedText style={[styles.title, { color: colors.secondary }]}>{title}</ThemedText>
@@ -109,7 +109,7 @@ export function OptionSheet({
                             );
                         })}
                     </Animated.View>
-                </Pressable>
+                </View>
             </View>
             )}
         </Modal>

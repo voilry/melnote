@@ -49,11 +49,11 @@ export function ManageGroupsModal({ visible, onClose, personName, allGroups, per
                         exiting={FadeOut.duration(220)}
                         style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.7)' }]}
                     />
-                    <Pressable style={{ flex: 1, justifyContent: 'flex-end' }} onPress={onClose}>
+                    <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+                        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
                         <Animated.View
                             entering={SlideInDown.duration(360).easing(EASE_ENTER)}
                             exiting={FadeOutDown.duration(260).easing(Easing.bezier(0.4, 0, 0.5, 1))}
-                            onStartShouldSetResponder={() => true}
                             style={[
                                 styles.bottomSheet,
                                 {
@@ -148,7 +148,7 @@ export function ManageGroupsModal({ visible, onClose, personName, allGroups, per
                                 )}
                             </ScrollView>
                         </Animated.View>
-                    </Pressable>
+                    </View>
                 </View>
             )}
         </Modal>

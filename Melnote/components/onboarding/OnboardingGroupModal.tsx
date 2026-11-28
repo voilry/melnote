@@ -91,7 +91,8 @@ export function OnboardingGroupModal({
                     ]}
                 />
 
-                <Pressable style={styles.overlayPress} onPress={onClose}>
+                <View style={styles.overlayPress}>
+                    <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
                     <Animated.View
                         entering={ZoomIn.duration(280)
                             .springify()
@@ -105,7 +106,6 @@ export function OnboardingGroupModal({
                                 borderColor: colors.border,
                             },
                         ]}
-                        onStartShouldSetResponder={() => true}
                     >
                         <View style={styles.header}>
                             <View>
@@ -281,7 +281,7 @@ export function OnboardingGroupModal({
                             </View>
                         </View>
                     </Animated.View>
-                </Pressable>
+                </View>
             </View>
         </Modal>
     );

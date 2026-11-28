@@ -14,7 +14,7 @@ import {
     View,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import { KeyboardAvoidingView, useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -27,7 +27,6 @@ import Animated, {
     useAnimatedStyle,
     useSharedValue,
     withSpring,
-    withTiming,
 } from 'react-native-reanimated';
 
 import { ThemedText } from '../ui/ThemedText';
@@ -209,7 +208,7 @@ export function QuickNoteModal({ visible, person, onClose, onSave }: QuickNoteMo
     const sheetScrollRef = useRef<ScrollView>(null);
     const savingRef = useRef(false);
     const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const keyboardPadding = useSharedValue(Math.max(insets.bottom, 8));
+    const { progress: keyboardProgressSV } = useReanimatedKeyboardAnimation();
     const sheetHeight = useSharedValue(collapsedSheetHeight);
     const sheetStartHeight = useSharedValue(collapsedSheetHeight);
 
@@ -314,24 +313,6 @@ export function QuickNoteModal({ visible, person, onClose, onSave }: QuickNoteMo
     }, [visible, draftLoaded, category, content, person?.id]);
 
     useEffect(() => {
-        keyboardPadding.value = Math.max(insets.bottom, 8);
-
-        const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-        const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-        const showSub = Keyboard.addListener(showEvent, () => {
-            keyboardPadding.value = withTiming(6, { duration: 180 });
-        });
-        const hideSub = Keyboard.addListener(hideEvent, () => {
-            keyboardPadding.value = withTiming(Math.max(insets.bottom, 8), { duration: 220 });
-        });
-
-        return () => {
-            showSub.remove();
-            hideSub.remove();
-        };
-    }, [insets.bottom]);
-
-    useEffect(() => {
         if (!showSheet) {
             setScrollBottomPadding(0);
             return;
@@ -353,9 +334,13 @@ export function QuickNoteModal({ visible, person, onClose, onSave }: QuickNoteMo
         return () => clearTimeout(timer);
     }, [showSheet]);
 
-    const bottomBarStyle = useAnimatedStyle(() => ({
-        paddingBottom: keyboardPadding.value,
-    }));
+    const bottomInset = Math.max(insets.bottom, 8);
+    const bottomBarStyle = useAnimatedStyle(() => {
+        const p = keyboardProgressSV.value;
+        return {
+            paddingBottom: bottomInset * (1 - p) + 6 * p,
+        };
+    });
 
     const sheetHeightStyle = useAnimatedStyle(() => ({
         height: sheetHeight.value + SHEET_BOTTOM_OVERHANG,

@@ -202,6 +202,13 @@ export const MarkdownText: React.FC<MarkdownTextProps> = ({
                 </ThemedText>
             );
         }
+        if (line.startsWith('### ')) {
+            return (
+                <ThemedText key={index} style={[styles.h3, { color: colors.text }]}>
+                    {renderInline(line.substring(4), [styles.h3, { color: colors.text }])}
+                </ThemedText>
+            );
+        }
 
         // Handle Blockquotes
         if (line.startsWith('> ')) {
@@ -318,8 +325,8 @@ export const MarkdownText: React.FC<MarkdownTextProps> = ({
                             baseStyle,
                             {
                                 fontFamily: Typography.fontFamily.boldItalic,
-                                fontWeight: '700',
-                                fontStyle: 'italic',
+                                fontWeight: undefined,
+                                fontStyle: undefined,
                             },
                         ]}
                     >
@@ -337,7 +344,7 @@ export const MarkdownText: React.FC<MarkdownTextProps> = ({
                             baseStyle,
                             {
                                 fontFamily: Typography.fontFamily.bold,
-                                fontWeight: '700',
+                                fontWeight: undefined,
                             },
                         ]}
                     >
@@ -355,7 +362,7 @@ export const MarkdownText: React.FC<MarkdownTextProps> = ({
                             baseStyle,
                             {
                                 fontFamily: Typography.fontFamily.italic,
-                                fontStyle: 'italic',
+                                fontStyle: undefined,
                             },
                         ]}
                     >
@@ -446,22 +453,25 @@ const styles = StyleSheet.create({
     },
     h1: {
         fontSize: 24,
-        lineHeight: 32,
+        lineHeight: 30,
         fontFamily: Typography.fontFamily.black,
-        fontWeight: '900',
         marginTop: 16,
         marginBottom: 8,
         letterSpacing: -0.5,
-        paddingBottom: 2,
     },
     h2: {
         fontSize: 20,
-        lineHeight: 28,
+        lineHeight: 26,
         fontFamily: Typography.fontFamily.extrabold,
-        fontWeight: '800',
         marginTop: 12,
         marginBottom: 6,
-        paddingBottom: 2,
+    },
+    h3: {
+        fontSize: 18,
+        lineHeight: 24,
+        fontFamily: Typography.fontFamily.bold,
+        marginTop: 10,
+        marginBottom: 4,
     },
     paragraph: {
         fontSize: 16,

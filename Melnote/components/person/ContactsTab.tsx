@@ -249,11 +249,11 @@ function ContactActionModal({ contact, colors, onClose, onOpen }: ContactActionM
                     entering={FadeIn.duration(220).easing(Easing.bezier(0.05, 0.7, 0.1, 1.0))}
                     style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0, 0, 0, 0.6)' }]}
                 />
-                <Pressable style={styles.actionBackdrop} onPress={onClose}>
+                <View style={styles.actionBackdrop}>
+                    <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
                     <Animated.View
                         entering={ZoomIn.duration(280).springify().damping(22).stiffness(240).mass(0.85)}
                         style={[styles.actionCard, { backgroundColor: colors.card }]}
-                        onStartShouldSetResponder={() => true}
                     >
                         <View style={styles.actionIcon}>
                             <PlatformGlyph platform={contact.platform} size={36} color={colors.tint} />
@@ -307,7 +307,7 @@ function ContactActionModal({ contact, colors, onClose, onOpen }: ContactActionM
                             </ScalePressable>
                         </View>
                     </Animated.View>
-                </Pressable>
+                </View>
             </View>
         </Modal>
     );

@@ -105,7 +105,8 @@ export function PhotoSourceSheet({ visible, onClose, onPicked, title }: PhotoSou
                     style={[StyleSheet.absoluteFill, styles.dim]}
                     pointerEvents="none"
                 />
-                <Pressable style={styles.backdrop} onPress={onClose}>
+                <View style={styles.backdrop}>
+                    <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
                     <Animated.View
                         entering={SHEET_ENTER}
                         exiting={FadeOutDown.duration(260).easing(Easing.bezier(0.4, 0, 0.5, 1))}
@@ -118,7 +119,6 @@ export function PhotoSourceSheet({ visible, onClose, onPicked, title }: PhotoSou
                                 marginBottom: -100,
                             },
                         ]}
-                        onStartShouldSetResponder={() => true}
                     >
                         <View style={[styles.handle, { backgroundColor: colors.border }]} />
 
@@ -160,7 +160,7 @@ export function PhotoSourceSheet({ visible, onClose, onPicked, title }: PhotoSou
                             </ThemedText>
                         </ScalePressable>
                     </Animated.View>
-                </Pressable>
+                </View>
             </View>
             )}
         </Modal>

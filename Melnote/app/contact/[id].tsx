@@ -9,6 +9,7 @@ import Animated, { FadeInDown, useSharedValue, useAnimatedStyle, withSpring, wit
 import { ContactRepository, Contact } from '../../db/repositories/ContactRepository';
 import { PersonRepository, Person } from '../../db/repositories/PersonRepository';
 import { useAppTheme } from '../../hooks/useAppTheme';
+import { Typography } from '../../constants/Typography';
 import { DeleteModal } from '../../components/ui/DeleteModal';
 import { Avatar } from '../../components/ui/Avatar';
 import { ScreenHeader } from '../../components/ui/ScreenHeader';
@@ -393,7 +394,7 @@ export default function ContactEditorScreen() {
                                                 <Icon size={20} color={isSelected ? (theme === 'dark' ? colors.background : '#FFF') : colors.text} weight={isSelected ? "fill" : "regular"} />
                                                 <ThemedText style={{
                                                     color: isSelected ? (theme === 'dark' ? colors.background : '#FFF') : colors.text,
-                                                    fontWeight: isSelected ? '700' : '500',
+                                                    fontFamily: isSelected ? Typography.fontFamily.bold : Typography.fontFamily.medium,
                                                     marginTop: 6,
                                                     fontSize: 12
                                                 }}>
@@ -410,7 +411,7 @@ export default function ContactEditorScreen() {
                             <View style={styles.activePlatformIcon}>
                                 <selectedPlatform.icon size={25} color={colors.tint} weight="fill" />
                             </View>
-                            <ThemedText style={{ fontSize: 16, fontWeight: '700' }}>{selectedPlatform.id}</ThemedText>
+                            <ThemedText style={{ fontSize: 16, fontFamily: Typography.fontFamily.bold }}>{selectedPlatform.id}</ThemedText>
                         </View>
                     )}
 
@@ -450,7 +451,7 @@ export default function ContactEditorScreen() {
                                 }}
                             >
                                 <Trash size={20} color={colors.error} />
-                                <ThemedText style={{ color: colors.error, fontWeight: '700', marginLeft: 8 }}>
+                                <ThemedText style={{ color: colors.error, fontFamily: Typography.fontFamily.bold, marginLeft: 8 }}>
                                     Delete Contact
                                 </ThemedText>
                             </ScalePressable>

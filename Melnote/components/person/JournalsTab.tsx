@@ -52,7 +52,7 @@ const JournalCard = memo(({ item, index, colors, router, isAcrylic, acrylic, ren
                     <Card style={[{ borderRadius: 16, backgroundColor: isAcrylic ? acrylic.panel : colors.surface, borderWidth: 0 }]} padding="md">
                         <View style={styles.entryHeader}>
                             <View style={[styles.journalDateBadge, { backgroundColor: colors.tint + '15' }]}>
-                                <ThemedText type="tiny" style={{ color: colors.tint, fontWeight: '800' }}>
+                                <ThemedText type="tiny" style={{ color: colors.tint, fontFamily: Typography.fontFamily.extrabold }}>
                                     {parseLocalDate(item.journal.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                                 </ThemedText>
                             </View>

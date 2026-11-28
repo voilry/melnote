@@ -15,6 +15,7 @@ import { Relationship } from '../../db/repositories/RelationshipRepository';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useAppTheme } from '../../hooks/useAppTheme';
+import { useSettings } from '../../store/SettingsContext';
 import { Typography } from '../../constants/Typography';
 import type { AcrylicPalette } from '../../utils/acrylic';
 
@@ -32,6 +33,7 @@ interface InfoTabProps {
 export function InfoTab({ person, age, relationships, allPeople, onEdit, onEditProfile, isAcrylic, acrylic }: InfoTabProps) {
     const router = useRouter();
     const { colors, hapticsEnabled } = useAppTheme();
+    const { settings } = useSettings();
 
     const getRelationDisplay = (rel: Relationship) => {
         const otherId = rel.sourcePersonId === person?.id ? rel.targetPersonId : rel.sourcePersonId;
@@ -57,7 +59,7 @@ export function InfoTab({ person, age, relationships, allPeople, onEdit, onEditP
                         icon={<User size={18} color={colors.icon} weight="fill" />}
                         placeholder={
                             <ScalePressable onPress={onEditProfile} overlayColor="transparent">
-                                <ThemedText style={{ color: colors.tint, fontWeight: '600', fontSize: 14 }}>+ Add</ThemedText>
+                                <ThemedText style={{ color: colors.tint, fontFamily: Typography.fontFamily.semibold, fontSize: 14 }}>+ Add</ThemedText>
                             </ScalePressable>
                         }
                     />
@@ -68,7 +70,7 @@ export function InfoTab({ person, age, relationships, allPeople, onEdit, onEditP
                         icon={<Calendar size={18} color={colors.icon} weight="fill" />}
                         placeholder={
                             <ScalePressable onPress={onEditProfile} overlayColor="transparent">
-                                <ThemedText style={{ color: colors.tint, fontWeight: '600', fontSize: 14 }}>+ Add</ThemedText>
+                                <ThemedText style={{ color: colors.tint, fontFamily: Typography.fontFamily.semibold, fontSize: 14 }}>+ Add</ThemedText>
                             </ScalePressable>
                         }
                     />
@@ -78,7 +80,7 @@ export function InfoTab({ person, age, relationships, allPeople, onEdit, onEditP
                         icon={<Clock size={18} color={colors.icon} weight="fill" />}
                         placeholder={
                             <ScalePressable onPress={onEditProfile} overlayColor="transparent">
-                                <ThemedText style={{ color: colors.tint, fontWeight: '600', fontSize: 14 }}>+ Set</ThemedText>
+                                <ThemedText style={{ color: colors.tint, fontFamily: Typography.fontFamily.semibold, fontSize: 14 }}>+ Set</ThemedText>
                             </ScalePressable>
                         }
                     />
@@ -107,7 +109,7 @@ export function InfoTab({ person, age, relationships, allPeople, onEdit, onEditP
                                     </View>
                                 ) : (
                                     <ScalePressable onPress={() => router.push(`/person/${person.id}/locations`)} overlayColor="transparent">
-                                        <ThemedText style={{ color: colors.tint, fontWeight: '600', fontSize: 13 }}>+ Add</ThemedText>
+                                        <ThemedText style={{ color: colors.tint, fontFamily: Typography.fontFamily.semibold, fontSize: 13 }}>+ Add</ThemedText>
                                     </ScalePressable>
                                 )}
                             </View>
@@ -143,7 +145,7 @@ export function InfoTab({ person, age, relationships, allPeople, onEdit, onEditP
                             )}
                             {relationships.length > 3 && (
                                 <View style={[styles.moreRelCircle, { backgroundColor: colors.surface, marginLeft: -12, borderColor: colors.card, borderWidth: 2 }]}>
-                                    <ThemedText type="tiny" style={{ fontWeight: '700' }}>+{relationships.length - 3}</ThemedText>
+                                    <ThemedText type="tiny" style={{ fontFamily: Typography.fontFamily.bold }}>+{relationships.length - 3}</ThemedText>
                                 </View>
                             )}
                         </View>
@@ -181,7 +183,16 @@ export function InfoTab({ person, age, relationships, allPeople, onEdit, onEditP
                 >
                     <Card style={[styles.descCard, isAcrylic && { backgroundColor: acrylic.panel, borderWidth: 0 }]} padding="lg">
                         {person.description ? (
-                            <MarkdownText content={person.description} style={styles.descText} />
+                            <MarkdownText
+                                content={person.description}
+                                style={[
+                                    styles.descText,
+                                    {
+                                        fontSize: settings.editorFontSize || 16,
+                                        lineHeight: Math.round((settings.editorFontSize || 16) * 1.5),
+                                    },
+                                ]}
+                            />
                         ) : (
                             <ThemedText style={{ color: colors.secondary, fontStyle: 'italic', lineHeight: 22 }}>
                                 Write down the story of how you met, their background, and other lasting impressions...
@@ -254,7 +265,7 @@ function MapTag({ label, value, icon, colors }: any) {
             scaleTo={0.95}
         >
             {icon}
-            <ThemedText type="tiny" style={{ color: colors.tint, fontWeight: '700', marginLeft: 4 }}>
+            <ThemedText type="tiny" style={{ color: colors.tint, fontFamily: Typography.fontFamily.bold, marginLeft: 4 }}>
                 {label}
             </ThemedText>
         </ScalePressable>

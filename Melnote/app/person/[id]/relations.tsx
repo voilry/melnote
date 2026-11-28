@@ -708,7 +708,7 @@ export default function RelationsScreen() {
                                         showCounter={false}
                                         autoCapitalize="words"
                                         containerStyle={{ marginBottom: 0 }}
-                                        style={{ fontFamily: Typography.fontFamily.medium, fontWeight: '400' }}
+                                        style={{ fontFamily: Typography.fontFamily.medium }}
                                     />
                                 </Animated.View>
 

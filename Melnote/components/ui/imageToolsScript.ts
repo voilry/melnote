@@ -487,6 +487,23 @@ export const IMAGE_TOOLS_JS = `
 
   /* ------------------------------------------------------------ selection */
 
+  function clearNativeImgSelection() {
+    try {
+      var domSel = window.getSelection();
+      if (!domSel || !domSel.rangeCount) return;
+      if (selectedPos != null) {
+        domSel.removeAllRanges();
+        return;
+      }
+      if (!domSel.isCollapsed && domSel.toString().trim() === '') {
+        var frag = domSel.getRangeAt(0).cloneContents();
+        if (frag && frag.querySelector && frag.querySelector('img')) {
+          domSel.removeAllRanges();
+        }
+      }
+    } catch (e) { }
+  }
+
   function notifySelection(force) {
     var ed = getEditor();
     if (!ed) return;
@@ -504,7 +521,10 @@ export const IMAGE_TOOLS_JS = `
       : { active: false };
 
     var key = JSON.stringify(payload);
-    if (!force && key === lastSelectionKey) return;
+    if (!force && key === lastSelectionKey) {
+      clearNativeImgSelection();
+      return;
+    }
     lastSelectionKey = key;
 
     if (active) {
@@ -514,6 +534,7 @@ export const IMAGE_TOOLS_JS = `
       selectedPos = null;
       hideOverlay();
     }
+    clearNativeImgSelection();
     post({ type: 'melnote-image-selection', value: payload });
   }
 
@@ -915,8 +936,17 @@ export const IMAGE_TOOLS_JS = `
     };
 
     document.addEventListener('selectionchange', function () {
-      try { notifySelection(false); } catch (e) { }
+      try {
+        notifySelection(false);
+        clearNativeImgSelection();
+      } catch (e) { }
     });
+    document.addEventListener('selectstart', function (event) {
+      var target = event.target;
+      if (target && target.tagName === 'IMG') {
+        event.preventDefault();
+      }
+    }, true);
     document.addEventListener('pointerdown', onDocPointerDown, true);
     document.addEventListener('pointermove', onPointerMove, true);
     document.addEventListener('pointerup', onPointerUp, true);

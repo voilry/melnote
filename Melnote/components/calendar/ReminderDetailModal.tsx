@@ -77,7 +77,8 @@ export function ReminderDetailModal({ visible, reminder: reminderProp, onClose, 
                     exiting={FadeOut.duration(220)}
                     style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.5)' }]}
                 />
-                <Pressable style={styles.modalBackdrop} onPress={onClose}>
+                <View style={styles.modalBackdrop}>
+                    <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
                     <Animated.View
                         entering={SlideInDown.duration(320).springify().damping(24).stiffness(240).mass(0.9)}
                         exiting={FadeOutDown.duration(260).easing(Easing.bezier(0.4, 0, 0.5, 1))}
@@ -85,7 +86,6 @@ export function ReminderDetailModal({ visible, reminder: reminderProp, onClose, 
                             styles.modalContent,
                             { backgroundColor: colors.card, paddingBottom: 100 + insets.bottom + 24 }
                         ]}
-                        onStartShouldSetResponder={() => true}
                     >
                         <View style={styles.handle} />
                         
@@ -212,7 +212,7 @@ export function ReminderDetailModal({ visible, reminder: reminderProp, onClose, 
                             </ScalePressable>
                         </View>
                     </Animated.View>
-                </Pressable>
+                </View>
             </View>
             )}
         </Modal>

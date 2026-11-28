@@ -682,15 +682,12 @@ export default function CalendarScreen() {
                         exiting={FadeOut.duration(220)}
                         style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.5)' }]}
                     />
-                    <Pressable
-                        style={{ flex: 1, justifyContent: 'flex-end' }}
-                        onPress={() => setShowDetailModal(false)}
-                    >
+                    <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+                        <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowDetailModal(false)} />
                         <Animated.View
                             entering={SlideInDown.duration(320).springify().damping(24).stiffness(240).mass(0.9)}
                             exiting={FadeOutDown.duration(260).easing(Easing.bezier(0.4, 0, 0.5, 1))}
                             style={[styles.modalContent, { backgroundColor: colors.card, paddingBottom: 100 + insets.bottom + 16 }]}
-                            onStartShouldSetResponder={() => true}
                         >
                             <View style={styles.modalHandle} />
                             <View style={styles.modalHeader}>
@@ -829,7 +826,7 @@ export default function CalendarScreen() {
                                 )}
                             </ScrollView>
                         </Animated.View>
-                    </Pressable>
+                    </View>
                 </View>
                 )}
             </Modal>
@@ -903,7 +900,7 @@ const styles = StyleSheet.create({
     },
     todayBtnText: {
         fontSize: 13,
-        fontWeight: '700',
+        fontFamily: Typography.fontFamily.bold,
     },
     monthNav: {
         flexDirection: 'row',
@@ -954,13 +951,13 @@ const styles = StyleSheet.create({
     },
     weekdayText: {
         fontSize: 10,
-        fontWeight: '800',
+        fontFamily: Typography.fontFamily.extrabold,
         opacity: 0.4,
         letterSpacing: 0.5,
     },
     dayText: {
         fontSize: 15,
-        fontWeight: '600',
+        fontFamily: Typography.fontFamily.semibold,
     },
     markerRow: {
         flexDirection: 'row',

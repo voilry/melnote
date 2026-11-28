@@ -1,6 +1,7 @@
-import { View, StyleSheet, ScrollView, Platform, Modal, Pressable, Keyboard, BackHandler, Share, LayoutAnimation } from 'react-native';
+import { View, StyleSheet, ScrollView, Platform, Modal, Pressable, Keyboard, BackHandler, Share } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack, useFocusEffect } from 'expo-router';
-import Animated, { Easing, FadeIn, FadeOut } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, FadeOut, useAnimatedStyle } from 'react-native-reanimated';
+import { useReanimatedKeyboardAnimation, useKeyboardState } from 'react-native-keyboard-controller';
 import { ThemedView } from '../../components/ui/ThemedView';
 import { ThemedText } from '../../components/ui/ThemedText';
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
@@ -97,6 +98,10 @@ export default function JournalEditorScreen() {
     const [content, setContent] = useState('');
     const [hasChanges, setHasChanges] = useState(false);
     const isDataLoadedRef = useRef(false);
+    const isSyncingDocRef = useRef(false);
+    const handleSyncingChange = useCallback((syncing: boolean) => {
+        isSyncingDocRef.current = syncing;
+    }, []);
 
         // The editor document contains ONLY the body. For a NEW journal it is
     // built synchronously (see journal init) and the WebView is gated on
@@ -115,11 +120,22 @@ export default function JournalEditorScreen() {
     const [isSaving, setIsSaving] = useState(false);
     const [showMoreMenu, setShowMoreMenu] = useState(false);
 
-    const [keyboardHeight, setKeyboardHeight] = useState(0);
-    const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+    const { height: keyboardHeightSV, progress: keyboardProgressSV } = useReanimatedKeyboardAnimation();
+    const isKeyboardVisible = useKeyboardState((state) => state.isVisible);
     // Pinned while the image source sheet is open: its native Modal hides the
     // keyboard, and the toolbar unmounting on keyboard-hide would close it.
     const [imageSheetOpen, setImageSheetOpen] = useState(false);
+    const keyboardPadStyle = useAnimatedStyle(() => ({
+        paddingBottom: isEditing ? Math.max(insets.bottom, -keyboardHeightSV.value) : insets.bottom,
+    }), [isEditing, insets.bottom]);
+    const toolbarHeight = Platform.OS === 'android' ? 40 : 38;
+    const toolbarFadeStyle = useAnimatedStyle(() => {
+        const p = (imageSheetOpen && !titleFocused) ? 1 : (titleFocused ? 0 : keyboardProgressSV.value);
+        return {
+            height: p * toolbarHeight,
+            opacity: p,
+        };
+    }, [imageSheetOpen, titleFocused, toolbarHeight]);
     const [imageSelection, setImageSelection] = useState<ImageSelection | null>(null);
     const [imageToolsPinned, setImageToolsPinned] = useState(false);
     const [imageActionTrigger, setImageActionTrigger] = useState<{ action: 'edit' | 'caption' | 'replace' | 'delete'; timestamp: number } | null>(null);
@@ -167,7 +183,7 @@ export default function JournalEditorScreen() {
         avoidIosKeyboard: true,
         bridgeExtensions,
         onChange: () => {
-            if (isDataLoadedRef.current) {
+            if (isDataLoadedRef.current && !isSyncingDocRef.current) {
                 setHasChanges(true);
             }
         }
@@ -191,14 +207,20 @@ export default function JournalEditorScreen() {
     }, [id, hasChanges]);
 
     // Leaving edit mode keeps the entry open and shows the reader again.
-    // Shared by the header button and the hardware back / back gesture.
+    // Shared by the header button, hardware back, and discard confirmation.
     const exitEditMode = useCallback(() => {
+        Keyboard.dismiss();
         setIsEditing(false);
+        setTitleFocused(false);
+        setMentionQuery(null);
         setImageSelection(null);
-        setTitle(journal?.title || '');
-        setContent(journal?.content || '');
-        setSelectedPeople(taggedPeople.map((t: any) => t.person.id));
-    }, [journal, taggedPeople]);
+        setImageActionTrigger(null);
+        setImageToolsPinned(false);
+        setTitle(originalTitle);
+        setContent(originalContent);
+        setSelectedPeople(originalSelectedPeople);
+        setHasChanges(false);
+    }, [originalTitle, originalContent, originalSelectedPeople]);
 
     // Hardware back mirrors the header button. On Android this is also the
     // edge-swipe back gesture: the system routes it through the JS back
@@ -209,6 +231,7 @@ export default function JournalEditorScreen() {
             const onBackPress = () => {
                 if (isEditing) {
                     if (hasChanges) {
+                        Keyboard.dismiss();
                         setShowDiscardModal(true);
                     } else if (id === 'new') {
                         router.back();
@@ -227,37 +250,6 @@ export default function JournalEditorScreen() {
 
     useEffect(() => {
         loadData();
-
-        const onKeyboardShow = (e: any) => {
-            const height = e?.endCoordinates?.height || 0;
-            if (Platform.OS === 'ios') {
-                LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-            }
-            setKeyboardHeight(height);
-            setIsKeyboardVisible(true);
-        };
-
-        const onKeyboardHide = () => {
-            if (Platform.OS === 'ios') {
-                LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-            }
-            setKeyboardHeight(0);
-            setIsKeyboardVisible(false);
-        };
-
-        const showListener = Keyboard.addListener(
-            Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
-            onKeyboardShow
-        );
-        const hideListener = Keyboard.addListener(
-            Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
-            onKeyboardHide
-        );
-
-        return () => {
-            showListener.remove();
-            hideListener.remove();
-        };
     }, [id]);
 
     const loadData = async () => {
@@ -529,13 +521,15 @@ export default function JournalEditorScreen() {
     const formattedDate = formatDisplayDate(journal.date);
 
     return (
-        <ThemedView style={[styles.container, { paddingBottom: isEditing && isKeyboardVisible ? keyboardHeight : insets.bottom }]}>
+        <ThemedView style={styles.container}>
+            <Animated.View style={[{ flex: 1 }, keyboardPadStyle]}>
             <Stack.Screen options={{ headerShown: false }} />
 
             <ScreenHeader
                 onBack={() => {
                     if (isEditing) {
                         if (hasChanges) {
+                            Keyboard.dismiss();
                             setShowDiscardModal(true);
                         } else if (id === 'new') {
                             router.back();
@@ -639,12 +633,15 @@ export default function JournalEditorScreen() {
                                 mentionNames={mentionNames}
                                 onTitleChange={(t) => {
                                     setTitle(t);
-                                    if (isDataLoadedRef.current) setHasChanges(true);
+                                    if (isDataLoadedRef.current && !isSyncingDocRef.current && t !== originalTitle) {
+                                        setHasChanges(true);
+                                    }
                                 }}
                                 onTitleFocusChange={setTitleFocused}
                                 journalFocusTitle={id === 'new'}
                                 onImageSelectionChange={handleImageSelectionChange}
                                 onImageAction={handleImageAction}
+                                onSyncingChange={handleSyncingChange}
                             />
                         </View>
                     )}
@@ -807,8 +804,13 @@ export default function JournalEditorScreen() {
                         onDeselect={handleImageDeselect}
                         onSheetOpenChange={setImageToolsPinned}
                     />
-                ) : isEditing && (isKeyboardVisible || imageSheetOpen) && !titleFocused ? (
-                    <EditorToolbar editor={editor} onSheetOpenChange={setImageSheetOpen} />
+                ) : isEditing ? (
+                    <Animated.View
+                        style={[{ overflow: 'hidden' }, toolbarFadeStyle]}
+                        pointerEvents={(isKeyboardVisible || imageSheetOpen) && !titleFocused ? 'auto' : 'none'}
+                    >
+                        <EditorToolbar editor={editor} onSheetOpenChange={setImageSheetOpen} />
+                    </Animated.View>
                 ) : null}
             </View>
 
@@ -878,20 +880,16 @@ export default function JournalEditorScreen() {
                 onCancel={() => setShowDiscardModal(false)}
                 onDelete={() => {
                     setShowDiscardModal(false);
+                    Keyboard.dismiss();
                     if (id === 'new') {
                         router.back();
                     } else {
-                        setContent(originalContent);
-                        setTitle(originalTitle);
-                        setSelectedPeople(originalSelectedPeople);
-                        editor.setContent(markdownToHtml(originalContent));
-                        setHasChanges(false);
-                        setIsEditing(false);
-                        setImageSelection(null);
+                        exitEditMode();
                     }
                 }}
                 actionLabel="Discard"
             />
+            </Animated.View>
         </ThemedView>
     );
 }

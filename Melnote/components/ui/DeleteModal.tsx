@@ -44,7 +44,8 @@ export function DeleteModal({
                     exiting={FadeOut.duration(220)}
                     style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.5)' }]}
                 />
-                <Pressable style={styles.modalBackdrop} onPress={onCancel}>
+                <View style={styles.modalBackdrop}>
+                    <Pressable style={StyleSheet.absoluteFill} onPress={onCancel} disabled={!visible} />
                     <Animated.View
                         entering={SlideInDown.duration(320).springify().damping(24).stiffness(240).mass(0.9)}
                         exiting={FadeOutDown.duration(260).easing(Easing.bezier(0.4, 0, 0.5, 1))}
@@ -55,7 +56,6 @@ export function DeleteModal({
                                 paddingBottom: 100 + insets.bottom + 24
                             }
                         ]}
-                        onStartShouldSetResponder={() => true}
                     >
                         <View style={[styles.handle, { backgroundColor: colors.border }]} />
                         <ThemedText type="sectionHeader" style={styles.title}>{title}</ThemedText>
@@ -66,6 +66,7 @@ export function DeleteModal({
                                 style={[styles.button, { backgroundColor: actionColor, flex: 1, marginRight: 8 }]}
                                 innerStyle={{ borderRadius: 16 }}
                                 onPress={onDelete}
+                                disabled={!visible}
                             >
                                 <ThemedText style={[styles.buttonLabel, { color: actionTextColor }]}>{actionLabel}</ThemedText>
                             </ScalePressable>
@@ -73,12 +74,13 @@ export function DeleteModal({
                                 style={[styles.button, { backgroundColor: colors.surface, flex: 1, marginLeft: 8 }]}
                                 innerStyle={{ borderRadius: 16 }}
                                 onPress={onCancel}
+                                disabled={!visible}
                             >
                                 <ThemedText style={styles.buttonLabel}>Cancel</ThemedText>
                             </ScalePressable>
                         </View>
                     </Animated.View>
-                </Pressable>
+                </View>
             </View>
             )}
         </Modal>

@@ -62,6 +62,8 @@ interface RichEditorProps {
      * Streamed into the page for the CSS Custom Highlight painter.
      */
     mentionNames?: string[];
+    /** Fires true while expectedDoc is being applied, and false once settled. */
+    onSyncingChange?: (syncing: boolean) => void;
 }
 
 export const RichEditor: React.FC<RichEditorProps> = ({
@@ -85,6 +87,7 @@ export const RichEditor: React.FC<RichEditorProps> = ({
     mentionNames,
     onImageSelectionChange,
     onImageAction,
+    onSyncingChange,
 }) => {
     const { colors, theme } = useAppTheme();
 
@@ -341,6 +344,9 @@ export const RichEditor: React.FC<RichEditorProps> = ({
         }
         img.ProseMirror-selectednode {
             outline: none !important;
+        }
+        img::selection, img::-moz-selection {
+            background: transparent !important;
         }
         body.melnote-image-dragging {
             -webkit-user-select: none !important;
@@ -1388,6 +1394,11 @@ export const RichEditor: React.FC<RichEditorProps> = ({
     // writing...") before its real text arrives.
     const [docReady, setDocReady] = useState(expectedDoc == null);
 
+    const syncSettleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    useEffect(() => () => {
+        if (syncSettleTimerRef.current) clearTimeout(syncSettleTimerRef.current);
+    }, []);
+
     const syncExpectedDoc = useCallback((force = false) => {
         const doc = expectedDocRef.current;
         if (!editor || doc == null || syncInFlightRef.current) return;
@@ -1425,8 +1436,14 @@ export const RichEditor: React.FC<RichEditorProps> = ({
                 syncInFlightRef.current = false;
                 return;
             }
+            if (syncSettleTimerRef.current) clearTimeout(syncSettleTimerRef.current);
+            onSyncingChange?.(true);
             editor.setContent(target);
             appliedDocRef.current = target;
+            syncSettleTimerRef.current = setTimeout(() => {
+                syncSettleTimerRef.current = null;
+                onSyncingChange?.(false);
+            }, 350);
 
             const clearHistoryScript = `
                 (function() {
@@ -1450,7 +1467,7 @@ export const RichEditor: React.FC<RichEditorProps> = ({
             setDocReady(true);
             syncInFlightRef.current = false;
         })();
-    }, [editor]);
+    }, [editor, onSyncingChange]);
 
     useEffect(() => {
         syncExpectedDoc();

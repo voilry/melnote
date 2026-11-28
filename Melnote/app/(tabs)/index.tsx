@@ -1246,10 +1246,8 @@ export default function PeopleScreen() {
                         exiting={FadeOut.duration(220)}
                         style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.5)' }]}
                     />
-                    <Pressable
-                        style={{ flex: 1, justifyContent: 'flex-end' }}
-                        onPress={() => setShowPersonManageModal(false)}
-                    >
+                    <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+                        <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowPersonManageModal(false)} />
                         <Animated.View
                             entering={SlideInDown.duration(320).springify().damping(24).stiffness(240).mass(0.9)}
                             exiting={FadeOutDown.duration(260).easing(Easing.bezier(0.4, 0, 0.5, 1))}
@@ -1261,7 +1259,6 @@ export default function PeopleScreen() {
                                     marginBottom: -120
                                 }
                             ]}
-                            onStartShouldSetResponder={() => true}
                         >
                             <View style={styles.sheetHeader}>
                                 <View style={[styles.handleIndicator, { backgroundColor: colors.border }]} />
@@ -1289,7 +1286,7 @@ export default function PeopleScreen() {
                                 </ThemedText>
                             </ScalePressable>
                         </Animated.View>
-                    </Pressable>
+                    </View>
                 </View>
                 )}
             </Modal>
@@ -1382,10 +1379,9 @@ const styles = StyleSheet.create({
     },
     personName: {
         fontSize: Typography.size.lg,
-        fontWeight: '600',
+        fontFamily: Typography.fontFamily.semibold,
         marginBottom: -1,
         letterSpacing: -0.2,
-        fontFamily: Typography.fontFamily.medium,
     },
     personPitch: {
         opacity: 0.7,

@@ -95,7 +95,7 @@ export function PersonHeader({ person, onEdit, scrollY, isAcrylic, acrylic, onNa
                             onPress={onEdit}
                             overlayColor="transparent"
                         >
-                            <ThemedText style={{ color: colors.tint, fontSize: 16, fontWeight: '600' }}>+ Add headline</ThemedText>
+                            <ThemedText style={{ color: colors.tint, fontSize: 16, fontFamily: Typography.fontFamily.semibold }}>+ Add headline</ThemedText>
                         </ScalePressable>
                     )
                 }
@@ -143,7 +143,7 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         marginTop: 8,
         opacity: 0.7,
-        fontWeight: '500',
+        fontFamily: Typography.fontFamily.medium,
         lineHeight: 24,
     },
     headerMeta: {

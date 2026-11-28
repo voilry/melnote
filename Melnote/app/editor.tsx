@@ -1,6 +1,7 @@
 import { View, StyleSheet, TextInput, TouchableOpacity, ScrollView, Platform, Keyboard, BackHandler, LayoutAnimation } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack, useFocusEffect } from 'expo-router';
-import Animated, { Easing, FadeIn, FadeOut } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, FadeOut, useAnimatedStyle } from 'react-native-reanimated';
+import { useReanimatedKeyboardAnimation, useKeyboardState } from 'react-native-keyboard-controller';
 import { ThemedView } from '../components/ui/ThemedView';
 import { ThemedText } from '../components/ui/ThemedText';
 import { MarkdownText } from '../components/ui/MarkdownText';
@@ -57,11 +58,22 @@ export default function EditorScreen() {
     const [sessionToken, setSessionToken] = useState(0);
     const [alertConfig, setAlertConfig] = useState<{ visible: boolean, title: string, description: string, type: 'success' | 'error' | 'info' | 'warning', onClose?: () => void } | null>(null);
 
-    const [keyboardHeight, setKeyboardHeight] = useState(0);
-    const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+    const { height: keyboardHeightSV, progress: keyboardProgressSV } = useReanimatedKeyboardAnimation();
+    const isKeyboardVisible = useKeyboardState((state) => state.isVisible);
     // Pinned while the image source sheet is open: its native Modal hides the
     // keyboard, and the toolbar unmounting on keyboard-hide would close it.
     const [imageSheetOpen, setImageSheetOpen] = useState(false);
+    const keyboardPadStyle = useAnimatedStyle(() => ({
+        paddingBottom: isEditing ? Math.max(insets.bottom, -keyboardHeightSV.value) : insets.bottom,
+    }), [isEditing, insets.bottom]);
+    const toolbarHeight = Platform.OS === 'android' ? 40 : 38;
+    const toolbarFadeStyle = useAnimatedStyle(() => {
+        const p = imageSheetOpen ? 1 : keyboardProgressSV.value;
+        return {
+            height: p * toolbarHeight,
+            opacity: p,
+        };
+    }, [imageSheetOpen, toolbarHeight]);
     // Contextual image controls: live selection from the WebView, plus a pin
     // while one of the toolbar's own modals is open.
     const [imageSelection, setImageSelection] = useState<ImageSelection | null>(null);
@@ -75,6 +87,10 @@ export default function EditorScreen() {
     }, [imageSelection]);
     const shownImageSelection = imageSelection ?? lastImageSelectionRef.current;
     const isDataLoadedRef = useRef(false);
+    const isSyncingDocRef = useRef(false);
+    const handleSyncingChange = useCallback((syncing: boolean) => {
+        isSyncingDocRef.current = syncing;
+    }, []);
 
     const handleImageSelectionChange = useCallback((selection: ImageSelection | null) => {
         if (selection?.active) {
@@ -107,7 +123,7 @@ export default function EditorScreen() {
         avoidIosKeyboard: true,
         bridgeExtensions,
         onChange: () => {
-            if (!isDataLoadedRef.current) return;
+            if (!isDataLoadedRef.current || isSyncingDocRef.current) return;
             setHasChanges(true);
             // Live word count: read the text back from the editor so the
             // counter moves as you type instead of only after a save.
@@ -156,6 +172,7 @@ export default function EditorScreen() {
             const onBackPress = () => {
                 if (isEditing) {
                     if (hasChanges) {
+                        Keyboard.dismiss();
                         setShowDiscardModal(true);
                     } else if (isNewEntry) {
                         return false;
@@ -174,36 +191,7 @@ export default function EditorScreen() {
 
     useEffect(() => {
         loadData();
-
-        const onKeyboardShow = (e: any) => {
-            const height = e?.endCoordinates?.height || 0;
-            if (Platform.OS === 'ios') {
-                LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-            }
-            setKeyboardHeight(height);
-            setIsKeyboardVisible(true);
-        };
-
-        const onKeyboardHide = () => {
-            if (Platform.OS === 'ios') {
-                LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-            }
-            setKeyboardHeight(0);
-            setIsKeyboardVisible(false);
-        };
-
-        const showListener = Keyboard.addListener(
-            Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
-            onKeyboardShow
-        );
-        const hideListener = Keyboard.addListener(
-            Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
-            onKeyboardHide
-        );
-
         return () => {
-            showListener.remove();
-            hideListener.remove();
             if (wordCountTimer.current) clearTimeout(wordCountTimer.current);
         };
     }, [id, type]);
@@ -357,6 +345,7 @@ export default function EditorScreen() {
     const handleBack = () => {
         if (isEditing) {
             if (hasChanges) {
+                Keyboard.dismiss();
                 setShowDiscardModal(true);
             } else if (isNewEntry) {
                 router.back();
@@ -520,7 +509,8 @@ export default function EditorScreen() {
     );
 
     return (
-        <ThemedView style={[styles.container, { paddingBottom: isEditing && isKeyboardVisible ? keyboardHeight : insets.bottom }]}>
+        <ThemedView style={styles.container}>
+            <Animated.View style={[{ flex: 1 }, keyboardPadStyle]}>
             <Stack.Screen options={{ headerShown: false }} />
 
             {renderHeader()}
@@ -553,6 +543,7 @@ export default function EditorScreen() {
                                 sessionToken={sessionToken}
                                 onImageSelectionChange={handleImageSelectionChange}
                                 onImageAction={handleImageAction}
+                                onSyncingChange={handleSyncingChange}
                             />
                         </View>
                     )}
@@ -599,8 +590,13 @@ export default function EditorScreen() {
                         onDeselect={handleImageDeselect}
                         onSheetOpenChange={setImageToolsPinned}
                     />
-                ) : isEditing && (isKeyboardVisible || imageSheetOpen) ? (
-                    <EditorToolbar editor={editor} onSheetOpenChange={setImageSheetOpen} />
+                ) : isEditing ? (
+                    <Animated.View
+                        style={[{ overflow: 'hidden' }, toolbarFadeStyle]}
+                        pointerEvents={isKeyboardVisible || imageSheetOpen ? 'auto' : 'none'}
+                    >
+                        <EditorToolbar editor={editor} onSheetOpenChange={setImageSheetOpen} />
+                    </Animated.View>
                 ) : null}
             </View>
 
@@ -623,6 +619,7 @@ export default function EditorScreen() {
                     if (cb) cb();
                 }}
             />
+            </Animated.View>
         </ThemedView>
     );
 }

@@ -469,7 +469,7 @@ const styles = StyleSheet.create({
     journalItem: { marginBottom: DesignSystem.spacing.md },
     cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
     journalTitle: { fontSize: 18, marginBottom: 8 },
-    journalContent: { fontSize: 16, lineHeight: 24, marginBottom: 16, fontWeight: '500' },
+    journalContent: { fontSize: 16, lineHeight: 24, marginBottom: 16, fontFamily: Typography.fontFamily.medium },
     tagsContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 },
     tag: {
         flexDirection: 'row',
@@ -478,7 +478,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 8,
         borderRadius: 10,
     },
-    tagName: { marginLeft: 6, fontWeight: '600', opacity: 0.8 },
+    tagName: { marginLeft: 6, fontFamily: Typography.fontFamily.semibold, opacity: 0.8 },
     emptyContainer: {
         flex: 1,
         justifyContent: 'center',

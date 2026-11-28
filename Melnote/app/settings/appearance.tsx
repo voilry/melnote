@@ -318,7 +318,7 @@ export default function AppearanceSettingsScreen() {
                                         <View style={[styles.paddingBox, styles.sortRow]}>
                                             <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
                                                 <List size={18} color={colors.icon} style={{ opacity: 0.4 }} />
-                                                <ThemedText style={{ marginLeft: 12, fontWeight: '600', fontSize: 15 }}>{getLabel(tab)}</ThemedText>
+                                                <ThemedText style={{ marginLeft: 12, fontFamily: Typography.fontFamily.semibold, fontSize: 15 }}>{getLabel(tab)}</ThemedText>
                                             </View>
                                             <View style={{ flexDirection: 'row' }}>
                                                 <ScalePressable

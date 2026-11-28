@@ -68,7 +68,7 @@ export const DashboardGroupCard = memo(({ title, description, iconName, color, i
                     <View style={[styles.iconContainer, { backgroundColor: colors.surface, width: 44, height: 44, borderRadius: 22, borderWidth: 0 }]}>
                         <IconComponent size={20} color={colors.text} weight="fill" />
                     </View>
-                    <ThemedText style={{ marginTop: 10, fontSize: 13, fontWeight: '700', color: colors.secondary }}>Create</ThemedText>
+                    <ThemedText style={{ marginTop: 10, fontSize: 13, fontFamily: Typography.fontFamily.bold, color: colors.secondary }}>Create</ThemedText>
                 </>
             ) : isMaster ? (
                 <>
@@ -79,16 +79,16 @@ export const DashboardGroupCard = memo(({ title, description, iconName, color, i
                             </View>
                             {count !== undefined && (
                                 <View style={[styles.badge, { backgroundColor: colors.surface, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4 }]}>
-                                    <ThemedText style={{ fontSize: 12, fontWeight: '700', color: color }}>{count}</ThemedText>
+                                    <ThemedText style={{ fontSize: 12, fontFamily: Typography.fontFamily.bold, color: color }}>{count}</ThemedText>
                                 </View>
                             )}
                         </View>
                         <View style={{ marginTop: 'auto', paddingTop: 16 }}>
-                            <ThemedText style={{ fontSize: 22, fontWeight: '800', opacity: 0.9, marginBottom: 2, letterSpacing: -0.3, fontFamily: Typography.fontFamily.bold }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.65}>
+                            <ThemedText style={{ fontSize: 22, opacity: 0.9, marginBottom: 2, letterSpacing: -0.3, fontFamily: Typography.fontFamily.extrabold }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.65}>
                                 {title}
                             </ThemedText>
                             {description && (
-                                <ThemedText style={{ color: colors.secondary, fontSize: 13, fontWeight: '500' }} numberOfLines={2}>
+                                <ThemedText style={{ color: colors.secondary, fontSize: 13, fontFamily: Typography.fontFamily.medium }} numberOfLines={2}>
                                     {description}
                                 </ThemedText>
                             )}
@@ -104,7 +104,7 @@ export const DashboardGroupCard = memo(({ title, description, iconName, color, i
                         <IconComponent size={28} color={color} weight="fill" />
                     </View>
                     <ThemedText
-                        style={{ fontSize: 16, fontWeight: '800', opacity: 0.9, marginTop: 6, letterSpacing: -0.3, textAlign: 'center', fontFamily: Typography.fontFamily.bold }}
+                        style={{ fontSize: 16, opacity: 0.9, marginTop: 6, letterSpacing: -0.3, textAlign: 'center', fontFamily: Typography.fontFamily.extrabold }}
                         numberOfLines={1}
                         adjustsFontSizeToFit
                         minimumFontScale={0.65}
@@ -112,7 +112,7 @@ export const DashboardGroupCard = memo(({ title, description, iconName, color, i
                         {title}
                     </ThemedText>
                     {description && (
-                        <ThemedText style={{ color: colors.secondary, fontSize: 13, fontWeight: '500', textAlign: 'center', marginTop: 2 }} numberOfLines={2}>
+                        <ThemedText style={{ color: colors.secondary, fontSize: 13, fontFamily: Typography.fontFamily.medium, textAlign: 'center', marginTop: 2 }} numberOfLines={2}>
                             {description}
                         </ThemedText>
                     )}

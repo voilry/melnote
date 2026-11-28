@@ -218,14 +218,11 @@ export const GroupSelector = forwardRef<GroupSelectorHandle, GroupSelectorProps>
                         entering={FadeIn.duration(240).easing(Easing.bezier(0.05, 0.7, 0.1, 1.0))}
                         style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.65)' }]}
                     />
-                    <Pressable
-                        style={[StyleSheet.absoluteFill, { justifyContent: 'center', alignItems: 'center', padding: 20 }]}
-                        onPress={() => setShowCreateModal(false)}
-                    >
+                    <View style={[StyleSheet.absoluteFill, { justifyContent: 'center', alignItems: 'center', padding: 20 }]}>
+                        <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowCreateModal(false)} />
                         <Animated.View
                             entering={ZoomIn.duration(280).springify().damping(22).stiffness(240).mass(0.85)}
                             style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border }]}
-                            onStartShouldSetResponder={() => true}
                         >
                             <View style={styles.modalHeader}>
                                 <ThemedText style={{ fontSize: 18, color: colors.text, fontFamily: Typography.fontFamily.serif }}>New Group</ThemedText>
@@ -282,7 +279,7 @@ export const GroupSelector = forwardRef<GroupSelectorHandle, GroupSelectorProps>
                                         style={[styles.actionBtn, { backgroundColor: colors.surface, flex: 1 }]}
                                         innerStyle={{ borderRadius: 12 }}
                                     >
-                                        <ThemedText style={{ color: colors.text, fontWeight: '600' }}>Cancel</ThemedText>
+                                        <ThemedText style={{ color: colors.text, fontFamily: Typography.fontFamily.semibold }}>Cancel</ThemedText>
                                     </ScalePressable>
                                     <ScalePressable
                                         onPress={handleCreate}
@@ -293,12 +290,12 @@ export const GroupSelector = forwardRef<GroupSelectorHandle, GroupSelectorProps>
                                         ]}
                                         innerStyle={{ borderRadius: 12 }}
                                     >
-                                        <ThemedText style={{ color: '#fff', fontWeight: 'bold' }}>Create Group</ThemedText>
+                                        <ThemedText style={{ color: '#fff', fontFamily: Typography.fontFamily.bold }}>Create Group</ThemedText>
                                     </ScalePressable>
                                 </View>
                             </View>
                         </Animated.View>
-                    </Pressable>
+                    </View>
                 </View>
             </Modal>
 
@@ -315,14 +312,11 @@ export const GroupSelector = forwardRef<GroupSelectorHandle, GroupSelectorProps>
                         entering={FadeIn.duration(240).easing(Easing.bezier(0.05, 0.7, 0.1, 1.0))}
                         style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.65)' }]}
                     />
-                    <Pressable
-                        style={[StyleSheet.absoluteFill, { justifyContent: 'center', alignItems: 'center', padding: 20 }]}
-                        onPress={() => setSelectedGroupToEdit(null)}
-                    >
+                    <View style={[StyleSheet.absoluteFill, { justifyContent: 'center', alignItems: 'center', padding: 20 }]}>
+                        <Pressable style={StyleSheet.absoluteFill} onPress={() => setSelectedGroupToEdit(null)} />
                         <Animated.View
                             entering={ZoomIn.duration(280).springify().damping(22).stiffness(240).mass(0.85)}
                             style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border }]}
-                            onStartShouldSetResponder={() => true}
                         >
                             <View style={styles.modalHeader}>
                                 <View>
@@ -400,7 +394,7 @@ export const GroupSelector = forwardRef<GroupSelectorHandle, GroupSelectorProps>
                                             style={[styles.actionBtn, { backgroundColor: colors.surface, flex: 1 }]}
                                             innerStyle={{ borderRadius: 12 }}
                                         >
-                                            <ThemedText style={{ color: colors.text, fontWeight: '600' }}>Cancel</ThemedText>
+                                            <ThemedText style={{ color: colors.text, fontFamily: Typography.fontFamily.semibold }}>Cancel</ThemedText>
                                         </ScalePressable>
 
                                         <ScalePressable
@@ -409,7 +403,7 @@ export const GroupSelector = forwardRef<GroupSelectorHandle, GroupSelectorProps>
                                             style={[styles.actionBtn, { backgroundColor: editColor, flex: 2 }]}
                                             innerStyle={{ borderRadius: 12 }}
                                         >
-                                            <ThemedText style={{ color: '#fff', fontWeight: 'bold' }}>Save Changes</ThemedText>
+                                            <ThemedText style={{ color: '#fff', fontFamily: Typography.fontFamily.bold }}>Save Changes</ThemedText>
                                         </ScalePressable>
                                     </View>
 
@@ -426,7 +420,7 @@ export const GroupSelector = forwardRef<GroupSelectorHandle, GroupSelectorProps>
                                 </View>
                             </View>
                         </Animated.View>
-                    </Pressable>
+                    </View>
                 </View>
             </Modal>
         </>
@@ -453,7 +447,7 @@ const styles = StyleSheet.create({
     },
     tabText: {
         fontSize: 14,
-        fontWeight: '600',
+        fontFamily: Typography.fontFamily.semibold,
     },
     modalOverlay: {
         flex: 1,

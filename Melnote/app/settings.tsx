@@ -420,7 +420,7 @@ export default function SettingsScreen() {
                                                 }
                                             ]}
                                         >
-                                            <ThemedText type="tiny" style={{ color: settings.defaultSort === opt.value ? colors.tint : colors.secondary, fontWeight: '800' }}>
+                                            <ThemedText type="tiny" style={{ color: settings.defaultSort === opt.value ? colors.tint : colors.secondary, fontFamily: Typography.fontFamily.extrabold }}>
                                                 {opt.label}
                                             </ThemedText>
                                         </ScalePressable>

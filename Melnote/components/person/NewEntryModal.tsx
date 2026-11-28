@@ -444,12 +444,11 @@ const styles = StyleSheet.create({
         paddingHorizontal: 10,
         paddingVertical: 0,
         fontSize: 12,
-        fontWeight: '500',
         fontFamily: Typography.fontFamily.medium,
     },
     recommendedLabel: {
         fontSize: 11,
-        fontWeight: '700',
+        fontFamily: Typography.fontFamily.bold,
         marginBottom: 8,
         marginLeft: 4,
         textTransform: 'uppercase',
@@ -472,7 +471,7 @@ const styles = StyleSheet.create({
     },
     chipText: {
         fontSize: 14,
-        fontWeight: '600',
+        fontFamily: Typography.fontFamily.semibold,
     },
     textArea: {
         minHeight: 250,
